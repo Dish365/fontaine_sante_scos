@@ -29,12 +29,11 @@ Each engine is designed to work independently while also integrating seamlessly 
   - Handles user authentication
   - Manages database models
   - Provides API gateway
-  - Version: 4.2.x
 
 - **FastAPI**
   - Processes complex calculations
   - Handles optimization logic
-  - Version: 0.100.x
+
 
 - **Service Layer**
   - Custom middleware for Django-FastAPI communication
