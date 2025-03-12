@@ -1,0 +1,37 @@
+{
+  "currencies": ["USD", "EUR", "CAD", "GBP", "JPY", "CNY", "INR"],
+  "paymentTerms": [
+    { "value": "net-30", "label": "Net 30 Days" },
+    { "value": "net-60", "label": "Net 60 Days" },
+    { "value": "net-90", "label": "Net 90 Days" },
+    { "value": "immediate", "label": "Immediate Payment" },
+    { "value": "advance", "label": "Advance Payment" },
+    { "value": "letter-of-credit", "label": "Letter of Credit" }
+  ],
+  "discountTypes": [
+    { "value": "percentage", "label": "Percentage Discount" },
+    { "value": "fixed", "label": "Fixed Amount" },
+    { "value": "volume", "label": "Volume-based Discount" },
+    { "value": "seasonal", "label": "Seasonal Discount" }
+  ],
+  "thresholdTypes": [
+    { "value": "quantity", "label": "Quantity Based" },
+    { "value": "value", "label": "Order Value Based" },
+    { "value": "frequency", "label": "Order Frequency Based" }
+  ],
+  "certifications": [
+    { "value": "organic", "label": "Organic Certified" },
+    { "value": "fair-trade", "label": "Fair Trade Certified" },
+    { "value": "non-gmo", "label": "Non-GMO Verified" },
+    { "value": "iso-22000", "label": "ISO 22000 Food Safety" },
+    { "value": "gfsi", "label": "GFSI Certified" },
+    { "value": "haccp", "label": "HACCP Certified" }
+  ],
+  "transportModes": [
+    { "value": "road", "label": "Road Transport" },
+    { "value": "rail", "label": "Rail Freight" },
+    { "value": "sea", "label": "Sea Freight" },
+    { "value": "air", "label": "Air Freight" },
+    { "value": "multimodal", "label": "Multimodal" }
+  ]
+}

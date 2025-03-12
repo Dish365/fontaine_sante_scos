@@ -1,0 +1,24 @@
+[
+  {
+    "id": "wh-1741526443312-jtx5ovf",
+    "name": "Central Distribution Center",
+    "type": "Distribution",
+    "location": {
+      "lat": 41.8781,
+      "lng": -87.6298,
+      "address": "123 Logistics Way, Chicago, IL 60007"
+    },
+    "capacity": {
+      "unit": "sq ft",
+      "maxCapacity": 50000,
+      "currentUtilization": 32000
+    },
+    "suppliers": [],
+    "materials": [],
+    "transitTimes": {
+      "inbound": 3,
+      "outbound": 2
+    },
+    "operationalCost": 12500
+  }
+]
