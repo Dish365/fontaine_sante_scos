@@ -1,0 +1,53 @@
+[
+  {
+    "id": "wh-1741526443312-jtx5ovf",
+    "name": "Central Distribution Center",
+    "location": {
+      "address": "123 Logistics Way, Chicago, IL 60007",
+      "coordinates": {
+        "lat": 41.8781,
+        "lng": -87.6298
+      }
+    },
+    "capacity": 50000,
+    "capacityUnit": "sq ft",
+    "utilizationRate": 64,
+    "handlingCapacity": 5000,
+    "operatingHours": "24/7",
+    "specialFeatures": ["Cold Storage", "High-bay racking", "Automated sorting"]
+  },
+  {
+    "id": "wh-montreal-001",
+    "name": "Montreal Regional Warehouse",
+    "location": {
+      "address": "456 Commerce Street, Montreal, QC H3C 2H6",
+      "coordinates": {
+        "lat": 45.5017,
+        "lng": -73.5673
+      }
+    },
+    "capacity": 28000,
+    "capacityUnit": "sq ft",
+    "utilizationRate": 72,
+    "handlingCapacity": 3000,
+    "operatingHours": "Mon-Fri 6AM-10PM",
+    "specialFeatures": ["Temperature-controlled", "Organic certified"]
+  },
+  {
+    "id": "wh-vancouver-002",
+    "name": "Vancouver Distribution Hub",
+    "location": {
+      "address": "789 Pacific Way, Vancouver, BC V6B 5T3",
+      "coordinates": {
+        "lat": 49.2827,
+        "lng": -123.1207
+      }
+    },
+    "capacity": 35000,
+    "capacityUnit": "sq ft",
+    "utilizationRate": 58,
+    "handlingCapacity": 4200,
+    "operatingHours": "Mon-Sat 7AM-9PM",
+    "specialFeatures": ["Dock-to-dock transfers", "Sustainable energy", "LEED certified"]
+  }
+]

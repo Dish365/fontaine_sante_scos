@@ -1,0 +1,19 @@
+
+### Core Data Analysis
+### Data Interfaces
+### Jupyter Support
+### Supply Chain Optimization
+### Visualization
+geopandas==0.14.3        # Geographic analysis for map coordinates
+ipywidgets==8.1.2        # Interactive dashboard elements 
+ipywidgets==8.1.2        # Interactive dashboard elements ### Core Data Analysis
+jupyterlab==4.0.11       # Analytics notebooks
+keplergl==0.4.2          # Advanced geographic visualizations
+matplotlib==3.8.3        # Basic charting
+numpy==1.26.4            # Economic metric calculations
+ortools==9.9.3963        # Route optimization algorithms
+pandas==2.2.2            # Supplier/material data processing
+plotly==5.18.0           # Interactive network diagrams
+prisma-client==0.1.3     # Database access for Python scripts
+pulp==2.8.0              # Linear programming for logistics
+python-dotenv==1.0.1     # Environment variable management

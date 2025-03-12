@@ -1,0 +1,54 @@
+based on the project plan and the background information lets complete the django systematicaly @django 
+
+
+Here is Fonte Sante:
+Fontaine Santé, established in 1990, is dedicated to offering high-quality, fresh, and nutritious ready-to-eat products. The company emphasizes the use of carefully selected ingredients for both their nutritional benefits and superior taste, aligning with their belief that "eating well" leads to "better living."
+fontainesante.com
+
+Product Range:
+Fontaine Santé boasts a diverse selection of over 90 fresh products, all free from preservatives. Their offerings include:
+* Hummus: Available in varieties such as Classic, Humm!, Organic, and Snacking options.
+* Dips: Includes Veggie Dips, Labneh, Boursin Dips, Tzatziki, and Spreads.
+* Salads: A range of fresh salads crafted for taste and nutrition.
+* Hors-d’oeuvres: A selection of appetizers suitable for various occasions.
+* Sauces: Flavorful sauces to complement diverse dishes.
+* Vegepatés: Vegetarian pâtés made from wholesome ingredients.
+* Desserts: Sweet treats to conclude meals on a delightful note.
+For a comprehensive view of their product lineup, you can visit their official website.
+fontainesante.com
+
+Retail Distribution:
+Fontaine Santé products are widely available across various regions:
+* Quebec: Retailers such as Metro, Provigo, IGA, Super C, Maxi, Costco, Walmart, Adonis, and many others.
+* Ontario: Available at Metro, Food Basics, Whole Foods Market, Sobeys, Real Canadian Superstore, and more.
+* Western Canada: Found in stores like Buy-Low Foods, Costco, IGA, Nesters Market, Safeway, Sobeys, and others.
+* USA: Distributed through retailers including Kroger, Ralphs, ShopRite, Foodtown, ACME Markets, Whole Foods Market, Costco, Sam's Club, and more.
+For a detailed list of retailers, please refer to their website.
+fontainesante.com
+
+About the Company:
+Fontaine Santé operates four manufacturing facilities and distribution centers across Canada and the United States. Their mission is to excite the taste buds by offering traditional recipes that reflect authentic craftsmanship. They prioritize innovation, continually striving to improve the quality and variety of their products while maintaining impeccable freshness. Their commitment extends to developing and maintaining a positive food safety culture, ensuring that their products are both safe and of high quality.
+fontainesante.com
+
+In 2025, Fontaine Santé partnered with Arbor Investments, a specialized private equity firm focusing on the food and beverage industry, to further their growth and reach.
+rwbaird.com
+
+For more information or inquiries, you can contact Fontaine Santé at 1-888-627-2683 or via email 
+
+This company wants me as the software engineer and sustainability accessment researcher to build a software that will help them. The solutiont they are looking for are:
+
+Economic: They source from different countries and regions. find an optimize engine for sourcing from the most cost effective supplyers. Considering all factors that contribute economically to the cost of sourcing (product cost, transportation and shipping, taxes, tarrifs, all other logistics cost to get the product from the supplyer to the factory).
+
+
+The second solution is:
+Quality. Quality assessment engine for Accessing the quality of the product
+
+the third solution is:
+the environmental impact assessment engine. A research conducted to help with accessing this. but for now lets create a useful environmental impact assesment engine for this
+
+ the fourth and final solution is a trade off analytics engine or a decition supporting system. This will help the company to:
+1. make a trade off analysis between economics (from the economics engine results), environmental (from the environmental engine results) and quality (from the quality assessment engine results)
+2. A decision supporting system that will allow the company to set some paramenters and the system will calculate and provide the most optimized results In terms of sourcing the raw materials factoring in the economics, environmental and quality. the can set some desired trade offs for (the economics, environmental and quality.)
+
+
+The tech stack for the backend is a blend between Django (for handling user authentication and the models for the database) and FastApi to handle to calculations and the logics) with a service that will allow the communication between the Django and FastApi.

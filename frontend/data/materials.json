@@ -1,0 +1,13 @@
+[
+  {
+    "material_id": "001",
+    "name": "Soybean",
+    "type": "Legume",
+    "description": "Non-GMO organic soybeans for food production",
+    "supplier_id": [
+      "001",
+      "002"
+    ],
+    "unit": "kg"
+  }
+]
