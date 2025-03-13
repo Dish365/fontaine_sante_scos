@@ -19,7 +19,11 @@ cd frontend
 pnpm install
 pnpm add @reactflow/reactflow-renderer react-leaflet leaflet @types/leaflet @radix-ui/react-dropdown-menu @radix-ui/react-tabs lucide-react recharts @tanstack/react-table framer-motion react-hook-form zod
 ```
-
+```
+Visualisation dependencies
+cd frontend
+pnpm install leaflet react-leaflet recharts
+```
 ## 2. Database Setup
 
 ```bash
