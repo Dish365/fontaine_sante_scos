@@ -16,11 +16,11 @@ export default function DataCollectionPage() {
     loadingRawMaterials,
     suppliers,
     addSupplier,
-    loadingSuppliers  
+    loadingSuppliers,
   } = useDataCollection();
 
   const handleSwitchToVisualization = () => {
-    router.push('/visualization');
+    router.push("/dashboard/visualization");
   };
 
   return (

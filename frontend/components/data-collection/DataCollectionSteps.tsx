@@ -8,7 +8,6 @@ import { toast } from "@/components/ui/use-toast";
 import type { RawMaterial } from "@/types/types";
 import { Supplier } from "@/types/types";
 import suppliersData from "@/data/suppliers.json";
-import type { SupplierMaterialPricing } from "@/types/types";
 import {
   Card,
   CardHeader,
@@ -17,7 +16,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, BarChart4 } from "lucide-react";
+import { CheckCircle2, ClipboardList } from "lucide-react";
 
 interface DataCollectionStepsProps {
   currentStep: number;
@@ -31,8 +30,7 @@ interface DataCollectionStepsProps {
   ) => Promise<RawMaterial>;
   loadingRawMaterials: boolean;
   loadingSuppliers: boolean;
-  addSupplier: (supplier: Omit<Supplier, "id">) => Promise<Supplier>;
-  onSwitchToVisualization: () => void;
+  onSwitchToSummary: () => void;
 }
 
 export function DataCollectionSteps({
@@ -43,12 +41,14 @@ export function DataCollectionSteps({
   updateRawMaterial,
   loadingRawMaterials,
   loadingSuppliers,
-  onSwitchToVisualization,
+  onSwitchToSummary,
 }: DataCollectionStepsProps) {
   const [materialName, setMaterialName] = useState("");
   const [materialType, setMaterialType] = useState("");
   const [materialDescription, setMaterialDescription] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [materialQuantity, setMaterialQuantity] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [materialUnit, setMaterialUnit] = useState("kg");
   const [currentMaterial, setCurrentMaterial] = useState<RawMaterial | null>(
     null
@@ -61,7 +61,15 @@ export function DataCollectionSteps({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Replace the suppliers prop with local state (merging fetched list and any new additions)
-  const [suppliersList, setSuppliersList] = useState<Supplier[]>(suppliersData as unknown as Supplier[]);
+  const [suppliersList, setSuppliersList] = useState<Supplier[]>(() => {
+    // Convert supplier_id to id for consistency
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (suppliersData as unknown[]).map((supplier: any) => ({
+      ...supplier,
+      id: supplier.supplier_id,
+      materials: supplier.material_id || [],
+    })) as Supplier[];
+  });
 
   // NEW SUPPLIER STATE VARIABLES
   const [newSupplierName, setNewSupplierName] = useState("");
@@ -82,11 +90,6 @@ export function DataCollectionSteps({
 
   // Add state for selected suppliers
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
-
-  // Simplified pricing state
-  const [supplierPricing, setSupplierPricing] = useState<
-    SupplierMaterialPricing[]
-  >([]);
 
   const [supplierTab, setSupplierTab] = useState("new");
 
@@ -298,7 +301,7 @@ export function DataCollectionSteps({
       const updatedMaterial = await updateRawMaterial(currentMaterial.id, {
         suppliers: selectedSupplierIds,
       });
-      
+
       setCurrentMaterial(updatedMaterial);
 
       toast({
@@ -321,27 +324,27 @@ export function DataCollectionSteps({
   };
 
   const handleSupplierSelect = (ids: string[]) => {
-    setSelectedSupplierIds(ids);
+    console.log("Setting supplier IDs:", ids);
+    // Ensure we're working with the correct ID format
+    const cleanedIds = ids.map((id) => id.trim());
+    setSelectedSupplierIds(cleanedIds);
   };
 
-  const handleComplete = () => {
-    // Navigate to dashboard or perform final actions
-    window.location.href = "/dashboard";
-  };
+  // Reset supplier selection when changing material
+  React.useEffect(() => {
+    if (currentStep === 2 && currentMaterial) {
+      console.log("Current material changed:", currentMaterial);
 
-  const handleReset = () => {
-    // Reset all state
-    setCurrentMaterial(null);
-    setMaterialName("");
-    setMaterialType("");
-    setMaterialDescription("");
-    setMaterialQuantity("");
-    setMaterialUnit("kg");
-    setSelectedExistingMaterialId("");
-    setSelectedSupplierIds([]);
-    setSupplierPricing([]);
-    setCurrentStep(1);
-  };
+      // If the material already has suppliers, pre-select them
+      if (currentMaterial.suppliers && currentMaterial.suppliers.length > 0) {
+        console.log("Pre-selecting suppliers:", currentMaterial.suppliers);
+        setSelectedSupplierIds(currentMaterial.suppliers);
+      } else {
+        console.log("No suppliers to pre-select, resetting selection");
+        setSelectedSupplierIds([]);
+      }
+    }
+  }, [currentMaterial, currentStep]);
 
   const renderStep = () => {
     switch (currentStep) {
@@ -409,20 +412,13 @@ export function DataCollectionSteps({
           />
         );
       case 3:
-        // Filter suppliers based on selectedSupplierIds
-        const selectedSuppliers = suppliersList.filter((supplier) =>
-          selectedSupplierIds.includes(supplier.id)
-        );
-
         return (
           <Step3Review
-            rawMaterial={currentMaterial}
-            suppliers={selectedSuppliers}
-            supplierPricing={supplierPricing}
-            onReset={handleReset}
-            onComplete={handleComplete}
-            onPrevious={() => setCurrentStep(2)}
-            onNext={setCurrentStep}
+            rawMaterials={rawMaterials}
+            suppliers={suppliersList}
+            currentMaterial={currentMaterial}
+            selectedSupplierIds={selectedSupplierIds}
+            onSwitchToSummary={onSwitchToSummary}
           />
         );
       default:
@@ -548,11 +544,12 @@ export function DataCollectionSteps({
                 <div className="pt-4">
                   <Button
                     variant="outline"
-                    className="w-full"
-                    onClick={() => onSwitchToVisualization()}
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={onSwitchToSummary}
                   >
-                    <BarChart4 className="mr-2 h-4 w-4" />
-                    View Visualization
+                    <ClipboardList className="h-4 w-4 mr-2" />
+                    View Data Entry Summary
                   </Button>
                 </div>
               </CardContent>

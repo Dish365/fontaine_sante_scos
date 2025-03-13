@@ -1,32 +1,30 @@
-import React, { useEffect } from "react";
+"use client";
 
-// Auto-map all suppliers and materials to the warehouse on first load
-useEffect(() => {
-  if (
-    !loadingSuppliers &&
-    !loadingRawMaterials &&
-    !loadingWarehouses &&
-    warehouses.length > 0 &&
-    suppliers.length > 0
-  ) {
-    // Check if the warehouse already has all suppliers and materials
-    const warehouse = warehouses[0];
-    const allSupplierIds = suppliers.map((s) => s.id);
-    const allMaterialIds = rawMaterials.map((m) => m.id);
+import React from "react";
+import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
+import RouteVisualization from "@/components/RouteVisualization";
 
-    const needsUpdate =
-      !allSupplierIds.every((id) => warehouse.suppliers.includes(id)) ||
-      !allMaterialIds.every((id) => warehouse.materials.includes(id));
+export default function VisualizationPage() {
+  const router = useRouter();
 
-    if (needsUpdate) {
-      mapAllToWarehouse();
-    }
-  }
-}, [
-  loadingSuppliers,
-  loadingRawMaterials,
-  loadingWarehouses,
-  warehouses,
-  suppliers,
-  rawMaterials,
-]);
+  return (
+    <div className="container mx-auto py-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Supply Chain Route Visualization
+          </h1>
+          <p className="text-muted-foreground">
+            View and analyze routes between suppliers and warehouses
+          </p>
+        </div>
+        <Button onClick={() => router.push("/dashboard/data-collection")}>
+          Back to Data Collection
+        </Button>
+      </div>
+
+      <RouteVisualization />
+    </div>
+  );
+}

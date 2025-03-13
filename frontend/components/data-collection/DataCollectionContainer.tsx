@@ -6,12 +6,13 @@ import {
   PlusCircle,
   Download,
   Database,
-  BarChart4,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDataCollection } from "@/hooks/useDataCollection";
 import { DataCollectionSteps } from "./DataCollectionSteps";
+import { DataEntrySummary } from "./DataEntrySummary";
 
 export function DataCollectionContainer() {
   const [currentStep, setCurrentStep] = useState(1);
@@ -23,7 +24,6 @@ export function DataCollectionContainer() {
     loadingSuppliers,
     addRawMaterial,
     updateRawMaterial,
-    addSupplier,
   } = useDataCollection();
 
   const resetForm = () => {
@@ -31,8 +31,8 @@ export function DataCollectionContainer() {
     setActiveTab("data-entry");
   };
 
-  const switchToVisualization = () => {
-    setActiveTab("visualization");
+  const switchToSummary = () => {
+    setActiveTab("summary");
   };
 
   return (
@@ -67,9 +67,9 @@ export function DataCollectionContainer() {
             <Database className="h-4 w-4 mr-2" />
             Data Entry
           </TabsTrigger>
-          <TabsTrigger value="visualization" className="flex items-center">
-            <BarChart4 className="h-4 w-4 mr-2" />
-            Visualization
+          <TabsTrigger value="summary" className="flex items-center">
+            <ClipboardList className="h-4 w-4 mr-2" />
+            Data Entry Summary
           </TabsTrigger>
         </TabsList>
 
@@ -83,24 +83,16 @@ export function DataCollectionContainer() {
             updateRawMaterial={updateRawMaterial}
             loadingRawMaterials={loadingRawMaterials}
             loadingSuppliers={loadingSuppliers}
-            addSupplier={addSupplier}
-            onSwitchToVisualization={switchToVisualization}
+            onSwitchToSummary={switchToSummary}
           />
         </TabsContent>
 
-        <TabsContent value="visualization" className="mt-6">
-          <div className="text-center p-8 border rounded-md">
-            <BarChart4 className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-xl font-medium mb-2">
-              Visualization Coming Soon
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              The supply chain visualization feature is under development.
-            </p>
-            <Button onClick={() => setActiveTab("data-entry")}>
-              Return to Data Entry
-            </Button>
-          </div>
+        <TabsContent value="summary" className="mt-6">
+          <DataEntrySummary
+            rawMaterials={rawMaterials}
+            suppliers={suppliers}
+            onReturnToDataEntry={() => setActiveTab("data-entry")}
+          />
         </TabsContent>
       </Tabs>
     </div>

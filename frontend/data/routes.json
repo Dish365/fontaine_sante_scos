@@ -1,0 +1,110 @@
+[
+  {
+    "route_id": "route-001",
+    "warehouse_id": "wh-1741526443312-jtx5ovf",
+    "supplier_id": "001",
+    "transport": {
+      "mode": "truck",
+      "cost": 1250.0,
+      "environmental_impact": {
+        "co2_emissions": 450,
+        "unit": "kg CO2e"
+      },
+      "time_taken": {
+        "value": 18,
+        "unit": "hours"
+      },
+      "distance": 850
+    }
+  },
+  {
+    "route_id": "route-002",
+    "warehouse_id": "wh-montreal-001",
+    "supplier_id": "001",
+    "transport": {
+      "mode": "train",
+      "cost": 1800.0,
+      "environmental_impact": {
+        "co2_emissions": 320,
+        "unit": "kg CO2e"
+      },
+      "time_taken": {
+        "value": 36,
+        "unit": "hours"
+      },
+      "distance": 1200
+    }
+  },
+  {
+    "route_id": "route-003",
+    "warehouse_id": "wh-vancouver-002",
+    "supplier_id": "002",
+    "transport": {
+      "mode": "ship",
+      "cost": 3500.0,
+      "environmental_impact": {
+        "co2_emissions": 780,
+        "unit": "kg CO2e"
+      },
+      "time_taken": {
+        "value": 120,
+        "unit": "hours"
+      },
+      "distance": 3500
+    }
+  },
+  {
+    "route_id": "route-004",
+    "warehouse_id": "wh-1741526443312-jtx5ovf",
+    "supplier_id": "002",
+    "transport": {
+      "mode": "airplane",
+      "cost": 4200.0,
+      "environmental_impact": {
+        "co2_emissions": 1250,
+        "unit": "kg CO2e"
+      },
+      "time_taken": {
+        "value": 6,
+        "unit": "hours"
+      },
+      "distance": 2800
+    }
+  },
+  {
+    "route_id": "route-005",
+    "warehouse_id": "wh-montreal-001",
+    "supplier_id": "002",
+    "transport": {
+      "mode": "truck",
+      "cost": 950.0,
+      "environmental_impact": {
+        "co2_emissions": 380,
+        "unit": "kg CO2e"
+      },
+      "time_taken": {
+        "value": 14,
+        "unit": "hours"
+      },
+      "distance": 650
+    }
+  },
+  {
+    "route_id": "route-006",
+    "warehouse_id": "wh-vancouver-002",
+    "supplier_id": "001",
+    "transport": {
+      "mode": "train",
+      "cost": 2100.0,
+      "environmental_impact": {
+        "co2_emissions": 420,
+        "unit": "kg CO2e"
+      },
+      "time_taken": {
+        "value": 48,
+        "unit": "hours"
+      },
+      "distance": 1850
+    }
+  }
+]

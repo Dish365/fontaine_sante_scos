@@ -7,76 +7,119 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  CheckCircle2,
-  ArrowLeft,
-  Check,
-  BarChart,
-} from "lucide-react";
-import { RawMaterial } from "@/lib/data-collection-utils";
-import { SupplierMaterialPricing, Supplier } from "@/types/types";
-import { formatCurrency } from "@/lib/utils";
+import { CheckCircle2, ArrowLeft, Check, ClipboardList } from "lucide-react";
+import { RawMaterial, Supplier } from "@/types";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { SimplifiedSupplierPricing } from "@/types/json-types";
+import { Badge } from "@/components/ui/badge";
 
-// Interface for simplified pricing fields when accessing from the SupplierMaterialPricing
-interface SimplifiedPricingFields {
-  price: number;
-  currency: string;
-  leadTime: string;
-  leadTimeUnit: string;
-  moq: number;
-  unit: string;
-}
-
-interface Step3ReviewProps {
-  rawMaterial: RawMaterial | null;
+export interface Step3ReviewProps {
+  rawMaterials: RawMaterial[];
   suppliers: Supplier[];
-  supplierPricing: SupplierMaterialPricing[];
-  onReset: () => void;
-  onComplete: () => void;
-  onPrevious: () => void;
-  onNext: (step: number) => void;
+  currentMaterial: RawMaterial | null;
+  selectedSupplierIds: string[];
+  onSwitchToSummary: () => void;
 }
 
 export function Step3Review({
-  rawMaterial,
+  rawMaterials,
   suppliers,
-  supplierPricing,
-  // onReset not used but kept in props for consistency
-  onComplete,
-  onPrevious,
-  onNext,
+  currentMaterial,
+  selectedSupplierIds,
+  onSwitchToSummary,
 }: Step3ReviewProps) {
-  // No need to filter suppliers here since they're already filtered in the parent component
-  const selectedSuppliers = suppliers;
+  // Filter suppliers based on selectedSupplierIds
+  const selectedSuppliers = suppliers.filter((supplier) =>
+    selectedSupplierIds.includes(supplier.id)
+  );
 
-  // Helper function to convert string or Date to Date
-  const toDate = (value: string | Date | undefined): Date => {
-    if (!value) return new Date();
-    return typeof value === 'string' ? new Date(value) : value;
+  // Helper function to format transport modes nicely
+  const formatTransportModes = (transportMode: any): React.ReactNode => {
+    // Add debugging to see what we're getting
+    console.log("Transport mode type:", typeof transportMode);
+    console.log("Transport mode value:", transportMode);
+
+    if (!transportMode) return "N/A";
+
+    let modes: string[] = [];
+
+    try {
+      // Handle different types of transportMode
+      if (typeof transportMode === "string") {
+        // If it's a string, split by comma
+        modes = transportMode.split(",").map((mode) => mode.trim());
+      } else if (Array.isArray(transportMode)) {
+        // If it's already an array, use it directly
+        modes = transportMode.map((mode) =>
+          typeof mode === "string" ? mode : String(mode)
+        );
+      } else {
+        // If it's neither string nor array, convert to string
+        return String(transportMode);
+      }
+    } catch (error) {
+      console.error("Error processing transport modes:", error);
+      console.error("Value that caused error:", transportMode);
+      return "Error processing transport modes";
+    }
+
+    // If we have no modes after processing, return N/A
+    if (modes.length === 0) return "N/A";
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {modes.map((mode, index) => (
+          <Badge key={index} variant="outline" className="capitalize">
+            {typeof mode === "string" ? mode.toLowerCase() : String(mode)}
+          </Badge>
+        ))}
+      </div>
+    );
   };
 
-  // Convert supplier pricing to our simplified format if needed
-  const simplifiedPricing: SimplifiedSupplierPricing[] = supplierPricing.map(pricing => {
-    // Use type assertion for properties that may not exist in the original type
-    const pricingWithDefaults: SimplifiedSupplierPricing = {
-      id: pricing.id || '',
-      supplierId: pricing.supplierId || '',
-      materialId: pricing.materialId || '',
-      price: (pricing as unknown as SimplifiedPricingFields).price || 0,
-      currency: (pricing as unknown as SimplifiedPricingFields).currency || 'USD',
-      leadTime: (pricing as unknown as SimplifiedPricingFields).leadTime || '0',
-      leadTimeUnit: (pricing as unknown as SimplifiedPricingFields).leadTimeUnit || 'days',
-      moq: (pricing as unknown as SimplifiedPricingFields).moq || 0,
-      unit: (pricing as unknown as SimplifiedPricingFields).unit || rawMaterial?.unit || 'kg',
-      createdAt: toDate(pricing.createdAt),
-      updatedAt: toDate(pricing.updatedAt)
-    };
-    
-    return pricingWithDefaults;
-  });
+  // Helper function to format certifications nicely
+  const formatCertifications = (certifications: any): React.ReactNode => {
+    // Add debugging
+    console.log("Certifications type:", typeof certifications);
+    console.log("Certifications value:", certifications);
+
+    if (!certifications) return "N/A";
+
+    let certs: string[] = [];
+
+    try {
+      if (Array.isArray(certifications)) {
+        certs = certifications.map((cert) =>
+          typeof cert === "string" ? cert : String(cert)
+        );
+      } else if (
+        typeof certifications === "object" &&
+        certifications.certifications
+      ) {
+        // Handle nested certifications object (from suppliers.json)
+        certs = Array.isArray(certifications.certifications)
+          ? certifications.certifications
+          : [String(certifications.certifications)];
+      } else if (typeof certifications === "string") {
+        certs = [certifications];
+      }
+    } catch (error) {
+      console.error("Error processing certifications:", error);
+      return "Error processing certifications";
+    }
+
+    if (certs.length === 0) return "N/A";
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {certs.map((cert, index) => (
+          <Badge key={index} variant="secondary" className="text-xs">
+            {cert}
+          </Badge>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -95,34 +138,38 @@ export function Step3Review({
               <h3 className="text-lg font-medium">Raw Material Details</h3>
               <Card>
                 <CardContent className="pt-6">
-                  {rawMaterial && (
+                  {currentMaterial && (
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">
                           Name
                         </p>
-                        <p className="text-lg">{rawMaterial.name}</p>
+                        <p className="text-lg">{currentMaterial.name}</p>
                       </div>
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">
                           Type
                         </p>
-                        <p className="text-lg">{rawMaterial.type}</p>
+                        <p className="text-lg">{currentMaterial.type}</p>
                       </div>
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">
-                          Quantity
+                          Origin
                         </p>
-                        <p className="text-lg">
-                          {rawMaterial.quantity} {rawMaterial.unit}
-                        </p>
+                        <p className="text-lg">{currentMaterial.origin}</p>
                       </div>
                       <div>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Unit
+                        </p>
+                        <p className="text-lg">{currentMaterial.unit}</p>
+                      </div>
+                      <div className="col-span-2">
                         <p className="text-sm font-medium text-muted-foreground">
                           Description
                         </p>
                         <p className="text-lg">
-                          {rawMaterial.description || "N/A"}
+                          {currentMaterial.description || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -139,95 +186,54 @@ export function Step3Review({
                 Associated Suppliers ({selectedSuppliers.length})
               </h3>
               <div className="grid gap-4">
-                {selectedSuppliers.map((supplier) => (
-                  <Card key={supplier.id}>
-                    <CardContent className="pt-6">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Name
-                          </p>
-                          <p className="text-lg">{supplier.name}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Location
-                          </p>
-                          <p className="text-lg">{supplier.location.address}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Transport Modes
-                          </p>
-                          <p className="text-lg">
-                            {supplier.transportMode || "N/A"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Certifications
-                          </p>
-                          <p className="text-lg">
-                            {supplier.certifications?.join(", ") || "N/A"}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
+                {selectedSuppliers.map((supplier) => {
+                  // Debug the supplier object
+                  console.log("Supplier:", supplier);
 
-            <Separator className="my-6" />
-
-            {/* Pricing Information Section */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">
-                Supplier Pricing ({simplifiedPricing.length})
-              </h3>
-              <div className="grid gap-4">
-                {simplifiedPricing.map((pricing) => (
-                  <Card key={pricing.id}>
-                    <CardContent className="pt-6">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Supplier
-                          </p>
-                          <p className="text-lg">
-                            {suppliers.find((s) => s.id === pricing.supplierId)
-                              ?.name || "Unknown Supplier"}
-                          </p>
+                  return (
+                    <Card key={supplier.id}>
+                      <CardContent className="pt-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">
+                              Name
+                            </p>
+                            <p className="text-lg">{supplier.name}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">
+                              Location
+                            </p>
+                            <p className="text-lg">
+                              {supplier.location.address}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">
+                              Transport Modes
+                            </p>
+                            <div className="text-lg">
+                              {formatTransportModes(supplier.transportMode)}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">
+                              Certifications
+                            </p>
+                            <div className="text-lg">
+                              {supplier.quality &&
+                              supplier.quality.certifications
+                                ? formatCertifications(
+                                    supplier.quality.certifications
+                                  )
+                                : formatCertifications(supplier.certifications)}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Price
-                          </p>
-                          <p className="text-lg">
-                            {formatCurrency(pricing.price, pricing.currency)}{" "}
-                            per {pricing.unit || rawMaterial?.unit}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Lead Time
-                          </p>
-                          <p className="text-lg">
-                            {pricing.leadTime} {pricing.leadTimeUnit}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            MOQ
-                          </p>
-                          <p className="text-lg">
-                            {pricing.moq} {pricing.unit || rawMaterial?.unit}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           </ScrollArea>
@@ -235,26 +241,11 @@ export function Step3Review({
           <div className="flex justify-between pt-4">
             <Button
               variant="outline"
-              onClick={onPrevious}
-              className="flex items-center gap-2"
+              onClick={onSwitchToSummary}
+              className="gap-2 mt-4"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Previous
+              <ClipboardList className="h-4 w-4" /> Data Entry Summary
             </Button>
-            <div className="space-x-2">
-              <Button
-                variant="outline"
-                onClick={() => onNext(3)}
-                className="flex items-center gap-2"
-              >
-                <BarChart className="h-4 w-4" />
-                Visualize Supply Chain
-              </Button>
-              <Button onClick={onComplete} className="flex items-center gap-2">
-                Complete
-                <Check className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>

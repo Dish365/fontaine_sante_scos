@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
 import { RawMaterial } from "@/lib/data-collection-utils";
 import { Supplier } from "@/types/types";
@@ -42,7 +43,7 @@ interface Step2Props {
   suppliers: Supplier[];
   loadingSuppliers: boolean;
   onBack: () => void;
-  onAddSupplier: () => Promise<void>; // Update type to match async function
+  onAddSupplier: () => Promise<void>;
   onAssociateSuppliers: () => void;
   onNewSupplierNameChange: (value: string) => void;
   onNewSupplierAddressChange: (value: string) => void;
@@ -55,8 +56,8 @@ interface Step2Props {
   onNewSupplierPerformanceChange: (value: string) => void;
   onSelectedSuppliersChange: (ids: string[]) => void;
   onGeocodeAddress: () => void;
-  onTabChange: (tab: string) => void; // Add this prop
-  defaultTab?: string; // Add default tab prop with default value
+  onTabChange: (tab: string) => void;
+  defaultTab?: string;
 }
 
 export function Step2SupplierAssociation({
@@ -83,10 +84,20 @@ export function Step2SupplierAssociation({
   onSelectedSuppliersChange,
   onGeocodeAddress,
   onTabChange,
-  defaultTab = "new", // Add default tab prop with default value
+  defaultTab = "new",
 }: Step2Props) {
   const [newSupplierError, setNewSupplierError] = React.useState("");
   const [currentTab, setCurrentTab] = React.useState(defaultTab);
+
+  // Debug logging for suppliers and selected IDs
+  React.useEffect(() => {
+    console.log(
+      "Suppliers:",
+      suppliers.map((s) => ({ id: s.id, name: s.name }))
+    );
+    console.log("Selected supplier IDs:", selectedExistingSupplierIds);
+    console.log("Current material:", currentMaterial);
+  }, [suppliers, selectedExistingSupplierIds, currentMaterial]);
 
   // If there are already selected suppliers, default to the existing tab
   React.useEffect(() => {
@@ -129,8 +140,35 @@ export function Step2SupplierAssociation({
     }
   };
 
+  // Handle checkbox change for supplier selection
+  const handleSupplierCheckboxChange = (
+    supplierId: string,
+    checked: boolean
+  ) => {
+    console.log(
+      `Checkbox change: supplierId=${supplierId}, checked=${checked}`
+    );
+
+    let newSelection: string[];
+    if (checked) {
+      // Add supplier if not already selected
+      newSelection = [
+        ...selectedExistingSupplierIds.filter((id) => id !== supplierId),
+        supplierId,
+      ];
+    } else {
+      // Remove supplier if selected
+      newSelection = selectedExistingSupplierIds.filter(
+        (id) => id !== supplierId
+      );
+    }
+
+    console.log("New selection:", newSelection);
+    onSelectedSuppliersChange(newSelection);
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="max-w-4xl mx-auto">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
@@ -153,12 +191,12 @@ export function Step2SupplierAssociation({
               onTabChange(value);
             }}
           >
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
               <TabsTrigger value="new">Add New Supplier</TabsTrigger>
               <TabsTrigger value="existing">Select Existing</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="new" className="space-y-4 mt-4">
+            <TabsContent value="new" className="space-y-4">
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label htmlFor="supplierName" className="text-sm font-medium">
@@ -187,6 +225,7 @@ export function Step2SupplierAssociation({
                         onNewSupplierAddressChange(e.target.value)
                       }
                       placeholder="Enter supplier address"
+                      className="flex-1"
                     />
                     <Button
                       type="button"
@@ -212,7 +251,7 @@ export function Step2SupplierAssociation({
                       { label: "Ship", value: "ship" },
                       { label: "Airplane", value: "airplane" },
                     ]}
-                    value={newSupplierTransportModes}
+                    selected={newSupplierTransportModes}
                     onChange={onNewSupplierTransportModesChange}
                     placeholder="Select transport modes"
                   />
@@ -258,7 +297,7 @@ export function Step2SupplierAssociation({
                       { label: "FSSC 22000", value: "FSSC 22000" },
                       { label: "Other", value: "Other" },
                     ]}
-                    value={newSupplierCertificationsList}
+                    selected={newSupplierCertificationsList}
                     onChange={onNewSupplierCertificationsListChange}
                     placeholder="Select certifications"
                   />
@@ -284,21 +323,49 @@ export function Step2SupplierAssociation({
               </div>
             </TabsContent>
 
-            <TabsContent value="existing" className="mt-4">
+            <TabsContent value="existing">
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     Select suppliers for {currentMaterial?.name}
                   </label>
-                  <MultiSelect
-                    options={suppliers.map((supplier) => ({
-                      label: `${supplier.name} (${supplier.location.address})`,
-                      value: supplier.id,
-                    }))}
-                    value={selectedExistingSupplierIds}
-                    onChange={onSelectedSuppliersChange}
-                    placeholder="Search and select suppliers..."
-                  />
+
+                  {/* Simple supplier selection list with checkboxes */}
+                  <div className="border rounded-md divide-y">
+                    {suppliers.map((supplier) => (
+                      <div
+                        key={supplier.id}
+                        className="p-3 flex items-center gap-3 hover:bg-muted/50 transition-colors"
+                      >
+                        <Checkbox
+                          id={`supplier-${supplier.id}`}
+                          checked={selectedExistingSupplierIds.includes(
+                            supplier.id
+                          )}
+                          onCheckedChange={(checked) =>
+                            handleSupplierCheckboxChange(
+                              supplier.id,
+                              checked === true
+                            )
+                          }
+                        />
+                        <div className="flex-1">
+                          <label
+                            htmlFor={`supplier-${supplier.id}`}
+                            className="font-medium cursor-pointer"
+                          >
+                            {supplier.name}{" "}
+                            <span className="text-xs text-muted-foreground">
+                              ({supplier.id})
+                            </span>
+                          </label>
+                          <p className="text-sm text-muted-foreground">
+                            {supplier.location.address}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {selectedExistingSupplierIds.length > 0 && (
@@ -312,14 +379,26 @@ export function Step2SupplierAssociation({
                         return supplier ? (
                           <div
                             key={id}
-                            className="flex items-center justify-between"
+                            className="flex items-center justify-between p-2 bg-background rounded-md"
                           >
-                            <span>{supplier.name}</span>
+                            <span className="font-medium">
+                              {supplier.name}{" "}
+                              <span className="text-xs text-muted-foreground">
+                                ({id})
+                              </span>
+                            </span>
                             <Badge variant="outline">
                               {supplier.location.address}
                             </Badge>
                           </div>
-                        ) : null;
+                        ) : (
+                          <div
+                            key={id}
+                            className="p-2 bg-red-50 text-red-500 rounded-md"
+                          >
+                            Supplier with ID {id} not found
+                          </div>
+                        );
                       })}
                     </div>
                   </div>

@@ -5,14 +5,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number, currency?: string): string {
-  // Default to USD if currency is not provided or empty
-  const currencyCode = currency && currency.trim() ? currency : "USD";
+export function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
 
+export function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: currencyCode,
-  }).format(amount);
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 export function formatDate(date: Date): string {

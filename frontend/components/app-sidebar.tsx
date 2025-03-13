@@ -98,6 +98,11 @@ export function AppSidebar() {
       href: "/dashboard/suppliers",
       icon: Building,
     },
+    {
+      title: "Route Visualization",
+      href: "/dashboard/visualization",
+      icon: Map,
+    },
   ];
 
   // Check if a route is active (exact match or child route)

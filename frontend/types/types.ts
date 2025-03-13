@@ -150,3 +150,22 @@ export interface GeocodingResponse {
   }[];
   status: string;
 }
+
+export interface Route {
+  id: string;
+  warehouseId: string;
+  supplierId: string;
+  transport: {
+    mode: string;
+    cost: number;
+    environmentalImpact: {
+      co2Emissions: number;
+      unit: string;
+    };
+    timeTaken: {
+      value: number;
+      unit: string;
+    };
+    distance: number;
+  };
+}

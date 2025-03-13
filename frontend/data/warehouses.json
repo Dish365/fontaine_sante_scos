@@ -1,6 +1,6 @@
 [
   {
-    "id": "wh-1741526443312-jtx5ovf",
+    "warehouse_id": "001",
     "name": "Central Distribution Center",
     "location": {
       "address": "123 Logistics Way, Chicago, IL 60007",
@@ -17,7 +17,7 @@
     "specialFeatures": ["Cold Storage", "High-bay racking", "Automated sorting"]
   },
   {
-    "id": "wh-montreal-001",
+    "warehouse_id": "002",
     "name": "Montreal Regional Warehouse",
     "location": {
       "address": "456 Commerce Street, Montreal, QC H3C 2H6",
@@ -34,7 +34,7 @@
     "specialFeatures": ["Temperature-controlled", "Organic certified"]
   },
   {
-    "id": "wh-vancouver-002",
+    "warehouse_id": "003",
     "name": "Vancouver Distribution Hub",
     "location": {
       "address": "789 Pacific Way, Vancouver, BC V6B 5T3",
