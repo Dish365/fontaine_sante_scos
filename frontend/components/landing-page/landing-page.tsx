@@ -75,7 +75,9 @@ export default function LandingPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Map className="h-6 w-6 text-primary" />
-              <span className="text-lg font-bold">Fontaine Santé SCOS</span>
+              <span className="text-lg font-bold">
+                Fontaine Santé SCA Platform
+              </span>
             </div>
             <div className="flex items-center gap-4">
               <ThemeToggle variant="ghost" showTooltip={true} />
@@ -98,10 +100,10 @@ export default function LandingPage() {
             </span>
           </div>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground mb-6">
-            Fontaine Santé SCOS
+            Fontaine Santé SCA Platform
           </h1>
           <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-3">
-            Supply Chain Operating System
+            Supply Chain Analytics Platform
           </p>
           <p className="text-lg text-muted-foreground max-w-3xl mx-auto mb-10">
             A comprehensive supply chain management system for sustainable,
@@ -131,9 +133,10 @@ export default function LandingPage() {
           </h2>
           <div className="max-w-3xl mx-auto text-center mb-12">
             <p className="text-lg text-muted-foreground mb-6">
-              Fontaine Santé SCOS is a prototype supply chain operating system
-              designed to help food manufacturers optimize their procurement
-              decisions based on sustainability, quality, and economic factors.
+              Fontaine Santé SCA Platform is a comprehensive supply chain
+              analytics platform designed to help food manufacturers optimize
+              their procurement decisions based on sustainability, quality, and
+              economic factors.
             </p>
             <p className="text-lg text-muted-foreground">
               This prototype demonstrates the core functionality and user
@@ -362,8 +365,8 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold mb-4">Explore the Prototype</h2>
           <p className="text-xl max-w-2xl mx-auto mb-8">
-            Access the interactive demo of Fontaine Santé SCOS to see how it can
-            transform your supply chain management.
+            Access the interactive demo of Fontaine Santé SCA Platform to see
+            how it can transform your supply chain management.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/dashboard">
@@ -386,7 +389,7 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-2 mb-4 md:mb-0">
               <Map className="h-5 w-5 text-primary" />
-              <span className="font-medium">Fontaine Santé SCOS</span>
+              <span className="font-medium">Fontaine Santé SCA Platform</span>
               <span className="text-sm text-muted-foreground ml-2">
                 Prototype Demo
               </span>
@@ -410,8 +413,8 @@ export default function LandingPage() {
           </div>
           <div className="mt-6 text-center text-sm text-muted-foreground">
             <p>
-              © 2025 Fontaine Santé SCOS. This is a prototype for demonstration
-              purposes only.
+              © 2025 Fontaine Santé SCA Platform. This is a prototype for
+              demonstration purposes only.
             </p>
           </div>
         </div>

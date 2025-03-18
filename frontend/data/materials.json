@@ -9,5 +9,33 @@
       "002"
     ],
     "unit": "kg"
+  },
+  {
+    "id": "material-89ee8328-4e12-4aca-80fa-09518d25a140",
+    "name": "Local Soybean",
+    "type": "Legume",
+    "description": "From Ghana",
+    "quantity": 0,
+    "unit": "kg",
+    "suppliers": [
+      "supplier-c91102f2-e27b-415d-8edd-fc380c12105f"
+    ],
+    "quality": {
+      "score": 0,
+      "defectRate": 0,
+      "consistencyScore": 0
+    },
+    "environmentalData": {
+      "carbonFootprint": 0,
+      "waterUsage": 0,
+      "landUse": 0,
+      "biodiversityImpact": ""
+    },
+    "economicData": {
+      "unitCost": 0,
+      "transportationCost": 0,
+      "storageCost": 0,
+      "totalCostPerUnit": 0
+    }
   }
 ]
