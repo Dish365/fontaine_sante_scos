@@ -3,7 +3,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Building,
   ChevronLeft,
   ChevronRight,
   Database,
@@ -11,6 +10,7 @@ import {
   Map,
   LayoutDashboard,
   Settings,
+  Sliders,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -89,19 +89,19 @@ export function AppSidebar() {
       icon: Database,
     },
     {
+      title: "Route Visualization",
+      href: "/dashboard/visualization",
+      icon: Map,
+    },
+    {
       title: "Analysis",
       href: "/dashboard/analysis",
       icon: BarChart3,
     },
     {
-      title: "Supplier Management",
-      href: "/dashboard/suppliers",
-      icon: Building,
-    },
-    {
-      title: "Route Visualization",
-      href: "/dashboard/visualization",
-      icon: Map,
+      title: "Trade-off Analysis",
+      href: "/dashboard/trade-off",
+      icon: Sliders,
     },
   ];
 

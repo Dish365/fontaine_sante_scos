@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Step1RawMaterial } from "./Step1_RawMaterial";
 import { Step2SupplierAssociation } from "./Step2_SupplierAssociation";
 import { Step3Review } from "./Step3_Review";
 import { toast } from "@/components/ui/use-toast";
 import type { RawMaterial } from "@/types/types";
 import { Supplier } from "@/types/types";
-import suppliersData from "@/data/suppliers.json";
 import {
   Card,
   CardHeader,
@@ -30,25 +29,26 @@ interface DataCollectionStepsProps {
   ) => Promise<RawMaterial>;
   loadingRawMaterials: boolean;
   loadingSuppliers: boolean;
-  onSwitchToSummary: () => void;
+  addSupplier: (supplier: Omit<Supplier, "id">) => Promise<Supplier>;
+  onSwitchToVisualization: () => void;
 }
 
 export function DataCollectionSteps({
   currentStep,
   setCurrentStep,
   rawMaterials,
+  suppliers,
   addRawMaterial,
   updateRawMaterial,
   loadingRawMaterials,
   loadingSuppliers,
-  onSwitchToSummary,
+  addSupplier,
+  onSwitchToVisualization,
 }: DataCollectionStepsProps) {
   const [materialName, setMaterialName] = useState("");
   const [materialType, setMaterialType] = useState("");
   const [materialDescription, setMaterialDescription] = useState("");
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [materialQuantity, setMaterialQuantity] = useState("");
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [materialUnit, setMaterialUnit] = useState("kg");
   const [currentMaterial, setCurrentMaterial] = useState<RawMaterial | null>(
     null
@@ -59,17 +59,6 @@ export function DataCollectionSteps({
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Replace the suppliers prop with local state (merging fetched list and any new additions)
-  const [suppliersList, setSuppliersList] = useState<Supplier[]>(() => {
-    // Convert supplier_id to id for consistency
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (suppliersData as unknown[]).map((supplier: any) => ({
-      ...supplier,
-      id: supplier.supplier_id,
-      materials: supplier.material_id || [],
-    })) as Supplier[];
-  });
 
   // NEW SUPPLIER STATE VARIABLES
   const [newSupplierName, setNewSupplierName] = useState("");
@@ -93,6 +82,11 @@ export function DataCollectionSteps({
 
   const [supplierTab, setSupplierTab] = useState("new");
 
+  const [supplierCoordinates, setSupplierCoordinates] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+
   const handleSupplierTabChange = (tab: string) => {
     setSupplierTab(tab);
   };
@@ -103,6 +97,8 @@ export function DataCollectionSteps({
     if (isAddingNewMaterial) {
       if (!materialName.trim()) newErrors.name = "Material name is required";
       if (!materialType.trim()) newErrors.type = "Material type is required";
+      if (!materialQuantity.trim()) newErrors.quantity = "Quantity is required";
+      if (!materialUnit.trim()) newErrors.unit = "Unit is required";
     } else {
       if (!selectedExistingMaterialId) {
         newErrors.existingMaterial = "Please select a raw material";
@@ -202,17 +198,17 @@ export function DataCollectionSteps({
         name: newSupplierName.trim(),
         location: {
           address: newSupplierAddress.trim(),
-          coordinates: { lat: 0, lng: 0 },
+          coordinates: supplierCoordinates || { lat: 0, lng: 0 },
         },
         materials: currentMaterial ? [currentMaterial.id] : [],
         certifications: newSupplierCertificationsList,
         transportMode: newSupplierTransportModes.join(", "),
         distance: null,
         transportationDetails: newSupplierTransportation,
-        productionCapacity: newSupplierCapacity,
+        productionCapacity: `${newSupplierCapacity} ${newSupplierCapacityUnit}`,
         performanceHistory: newSupplierPerformance,
         environmentalImpact: null,
-        riskScore: "0.3",
+        riskScore: 0.3,
         quality: {
           score: 85,
           certifications: newSupplierCertificationsList,
@@ -235,21 +231,10 @@ export function DataCollectionSteps({
         },
       };
 
-      // Call the API to add the supplier
-      const response = await fetch("/api/suppliers", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(supplierData),
-      });
+      // Call the addSupplier function from props
+      const addedSupplier = await addSupplier(supplierData);
 
-      if (!response.ok) {
-        throw new Error("Failed to add supplier");
-      }
-
-      const addedSupplier = await response.json();
-      setSuppliersList((prev) => [...prev, addedSupplier]);
+      // Add the new supplier ID to the selected suppliers
       setSelectedSupplierIds((prev) => [...prev, addedSupplier.id]);
 
       // Clear form
@@ -258,6 +243,7 @@ export function DataCollectionSteps({
       setNewSupplierTransportModes([]);
       setNewSupplierCapacity("");
       setNewSupplierCertificationsList([]);
+      setSupplierCoordinates(null);
 
       toast({
         title: "Success",
@@ -331,7 +317,7 @@ export function DataCollectionSteps({
   };
 
   // Reset supplier selection when changing material
-  React.useEffect(() => {
+  useEffect(() => {
     if (currentStep === 2 && currentMaterial) {
       console.log("Current material changed:", currentMaterial);
 
@@ -345,6 +331,13 @@ export function DataCollectionSteps({
       }
     }
   }, [currentMaterial, currentStep]);
+
+  // Handle coordinates update from Step2SupplierAssociation
+  const handleCoordinatesUpdate = (
+    coords: { lat: number; lng: number } | null
+  ) => {
+    setSupplierCoordinates(coords);
+  };
 
   const renderStep = () => {
     switch (currentStep) {
@@ -387,7 +380,7 @@ export function DataCollectionSteps({
             selectedExistingSupplierIds={selectedSupplierIds}
             isSubmitting={isSubmitting}
             isGeocodingAddress={false}
-            suppliers={suppliersList}
+            suppliers={suppliers}
             loadingSuppliers={loadingSuppliers}
             onBack={() => setCurrentStep(1)}
             onGeocodeAddress={() => {}}
@@ -406,6 +399,7 @@ export function DataCollectionSteps({
             onAssociateSuppliers={handleAssociateSuppliers}
             onAddSupplier={handleAddSupplier}
             onTabChange={handleSupplierTabChange}
+            onCoordinatesUpdate={handleCoordinatesUpdate}
             defaultTab={
               selectedSupplierIds.length > 0 ? "existing" : supplierTab
             }
@@ -415,10 +409,10 @@ export function DataCollectionSteps({
         return (
           <Step3Review
             rawMaterials={rawMaterials}
-            suppliers={suppliersList}
+            suppliers={suppliers}
             currentMaterial={currentMaterial}
             selectedSupplierIds={selectedSupplierIds}
-            onSwitchToSummary={onSwitchToSummary}
+            onSwitchToSummary={onSwitchToVisualization}
           />
         );
       default:
@@ -546,7 +540,7 @@ export function DataCollectionSteps({
                     variant="outline"
                     size="sm"
                     className="w-full mt-2"
-                    onClick={onSwitchToSummary}
+                    onClick={onSwitchToVisualization}
                   >
                     <ClipboardList className="h-4 w-4 mr-2" />
                     View Data Entry Summary

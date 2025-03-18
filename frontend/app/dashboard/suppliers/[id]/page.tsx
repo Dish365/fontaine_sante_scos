@@ -35,6 +35,168 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import Link from "next/link";
+import { Progress } from "@/components/ui/progress";
+import SupplierLocationMap from "@/components/SupplierLocationMap";
+
+// Add a style tag to fix positioning issues
+const SupplierPageStyles = () => (
+  <style jsx global>{`
+    /* Ensure the supplier page is properly positioned */
+    main {
+      position: relative !important;
+      z-index: 10 !important;
+      background-color: var(--background) !important;
+    }
+
+    /* Fix any potential overflow issues */
+    .container {
+      position: relative !important;
+      z-index: 10 !important;
+      background-color: var(--background) !important;
+      width: 100% !important;
+      max-width: 1200px !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+      padding-left: 1rem !important;
+      padding-right: 1rem !important;
+    }
+
+    /* Ensure dialogs appear above everything */
+    [role="dialog"] {
+      z-index: 50 !important;
+      position: fixed !important;
+    }
+
+    /* Fix for the sidebar */
+    [role="navigation"] {
+      z-index: 5 !important;
+    }
+
+    /* Ensure links are clickable */
+    a,
+    button {
+      position: relative !important;
+      z-index: 15 !important;
+    }
+
+    /* Fix for breadcrumbs */
+    nav[aria-label="breadcrumb"] {
+      position: relative !important;
+      z-index: 15 !important;
+    }
+  `}</style>
+);
+
+// Add TypeScript declaration for the global navigation function
+declare global {
+  interface Window {
+    __navigateToSuppliers: () => void;
+  }
+}
+
+// Add a global navigation handler at the top of the file
+// This will be used as a last resort if other navigation methods fail
+if (typeof window !== "undefined") {
+  // Only run in browser environment
+  window.__navigateToSuppliers = function () {
+    window.location.href = "/dashboard/suppliers";
+  };
+}
+
+function NavigationLink({
+  href,
+  children,
+  className = "",
+}: {
+  href: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const router = useRouter();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+
+    // Try multiple navigation methods
+    try {
+      // Method 1: Next.js router
+      router.push(href);
+
+      // Method 2: After a short delay, try direct navigation if router fails
+      setTimeout(() => {
+        window.location.href = href;
+      }, 100);
+    } catch (error) {
+      console.error("Navigation error:", error);
+      // Method 3: Fallback to direct navigation
+      window.location.href = href;
+    }
+  };
+
+  return (
+    <a
+      href={href}
+      onClick={handleClick}
+      className={`text-primary hover:underline ${className}`}
+    >
+      {children}
+    </a>
+  );
+}
+
+// Create a button that looks like the original but uses multiple navigation methods
+function BackButton() {
+  const router = useRouter();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+
+    // Try all navigation methods in sequence
+    try {
+      // Method 1: Next.js router
+      router.push("/dashboard/suppliers");
+
+      // Method 2: After a short delay, try direct navigation
+      setTimeout(() => {
+        try {
+          // Method 3: Use history API
+          window.history.pushState({}, "", "/dashboard/suppliers");
+          window.history.go(0); // Refresh the page
+        } catch (historyError) {
+          console.error("History navigation failed:", historyError);
+
+          // Method 4: Direct location change
+          window.location.href = "/dashboard/suppliers";
+        }
+      }, 100);
+    } catch (error) {
+      console.error("Navigation error:", error);
+      // Method 5: Global navigation function
+      if (typeof window !== "undefined" && window.__navigateToSuppliers) {
+        window.__navigateToSuppliers();
+      } else {
+        // Method 6: Last resort
+        window.location.replace("/dashboard/suppliers");
+      }
+    }
+  };
+
+  return (
+    <Button variant="ghost" onClick={handleClick}>
+      <ArrowLeft className="h-4 w-4 mr-2" />
+      Back to Suppliers
+    </Button>
+  );
+}
 
 export default function SupplierDetailPage() {
   const params = useParams();
@@ -43,6 +205,50 @@ export default function SupplierDetailPage() {
   const { getSupplierById, deleteSupplier, loading } = useSuppliers();
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Fix for main content area positioning
+  useEffect(() => {
+    // Fix the main content area positioning
+    const fixMainContentPosition = () => {
+      const mainContent = document.querySelector("main");
+      if (mainContent) {
+        // Apply styles to ensure content is visible
+        mainContent.style.position = "relative";
+        mainContent.style.zIndex = "10";
+        mainContent.style.backgroundColor = "var(--background)";
+
+        // Ensure the content isn't hidden behind the sidebar
+        const sidebar = document.querySelector('[role="navigation"]');
+        if (sidebar) {
+          const sidebarWidth = sidebar.getBoundingClientRect().width;
+          if (sidebarWidth > 0) {
+            // Only adjust if sidebar is visible
+            mainContent.style.marginLeft = `${sidebarWidth}px`;
+            mainContent.style.width = `calc(100% - ${sidebarWidth}px)`;
+          }
+        }
+      }
+    };
+
+    // Apply the fix immediately
+    fixMainContentPosition();
+
+    // Also apply on resize to handle sidebar collapsing/expanding
+    window.addEventListener("resize", fixMainContentPosition);
+
+    // Clean up
+    return () => {
+      window.removeEventListener("resize", fixMainContentPosition);
+      const mainContent = document.querySelector("main");
+      if (mainContent) {
+        mainContent.style.position = "";
+        mainContent.style.zIndex = "";
+        mainContent.style.backgroundColor = "";
+        mainContent.style.marginLeft = "";
+        mainContent.style.width = "";
+      }
+    };
+  }, []);
 
   useEffect(() => {
     // Get supplier details
@@ -55,9 +261,10 @@ export default function SupplierDetailPage() {
         description: "Supplier not found",
         variant: "destructive",
       });
-      router.push("/dashboard/suppliers");
+      navigateTo("/dashboard/suppliers");
     }
-  }, [supplierId, getSupplierById, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplierId, getSupplierById]);
 
   const handleDeleteSupplier = async () => {
     setIsDeleting(true);
@@ -68,7 +275,7 @@ export default function SupplierDetailPage() {
           title: "Success",
           description: "Supplier deleted successfully",
         });
-        router.push("/dashboard/suppliers");
+        navigateTo("/dashboard/suppliers");
       }
     } catch (error) {
       console.error("Error deleting supplier:", error);
@@ -82,8 +289,27 @@ export default function SupplierDetailPage() {
     }
   };
 
-  const handleEditSupplier = () => {
-    router.push(`/dashboard/suppliers/${supplierId}/edit`);
+  // Add a helper function for navigation
+  const navigateTo = (path: string) => {
+    // Use direct navigation to avoid routing issues
+    // Add a small delay to ensure any pending state updates are completed
+    setTimeout(() => {
+      window.location.href = path;
+    }, 50);
+  };
+
+  const goToSuppliers = () => {
+    // Use direct navigation to avoid routing issues
+    setTimeout(() => {
+      window.location.href = "/dashboard/suppliers";
+    }, 50);
+  };
+
+  const goToEdit = () => {
+    // Use direct navigation to avoid routing issues
+    setTimeout(() => {
+      window.location.href = `/dashboard/suppliers/${supplierId}/edit`;
+    }, 50);
   };
 
   if (loading) {
@@ -95,17 +321,62 @@ export default function SupplierDetailPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto py-6 space-y-6 relative z-10 bg-background">
+      <SupplierPageStyles />
+      <Breadcrumb className="mb-4">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <a
+              href="/dashboard"
+              className="text-primary hover:underline"
+              onClick={(e) => {
+                e.preventDefault();
+                navigateTo("/dashboard");
+              }}
+            >
+              Dashboard
+            </a>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <a
+              href="/dashboard/suppliers"
+              className="text-primary hover:underline"
+              onClick={(e) => {
+                e.preventDefault();
+                navigateTo("/dashboard/suppliers");
+              }}
+            >
+              Suppliers
+            </a>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <span className="text-muted-foreground">{supplier.name}</span>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="flex items-center justify-between">
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/dashboard/suppliers")}
+        <a
+          href="/dashboard/suppliers"
+          className="inline-flex items-center text-primary hover:underline"
+          onClick={(e) => {
+            e.preventDefault();
+            navigateTo("/dashboard/suppliers");
+          }}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Suppliers
-        </Button>
+        </a>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleEditSupplier}>
+          <Button
+            variant="outline"
+            onClick={(e) => {
+              e.preventDefault();
+              goToEdit();
+            }}
+          >
             <Edit className="h-4 w-4 mr-2" />
             Edit
           </Button>
@@ -116,7 +387,7 @@ export default function SupplierDetailPage() {
                 Delete
               </Button>
             </AlertDialogTrigger>
-            <AlertDialogContent>
+            <AlertDialogContent className="z-50">
               <AlertDialogHeader>
                 <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                 <AlertDialogDescription>
@@ -139,115 +410,215 @@ export default function SupplierDetailPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">{supplier.name}</CardTitle>
-          {supplier.location?.address && (
-            <CardDescription className="flex items-center">
-              <MapPin className="h-4 w-4 mr-1" />
-              {supplier.location.address}
-            </CardDescription>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <h3 className="font-semibold">Contact Information</h3>
-              {supplier.contactInfo?.phone && (
-                <p className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  {supplier.contactInfo.phone}
-                </p>
-              )}
-              {supplier.contactInfo?.email && (
-                <p className="flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  {supplier.contactInfo.email}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="font-semibold">Company Information</h3>
-              <p className="flex items-center gap-2">
-                <Building className="h-4 w-4" />
-                {supplier.economicData?.employeeCount || "N/A"} employees
-              </p>
-              {supplier.productionCapacity && (
-                <p>Production Capacity: {supplier.productionCapacity}</p>
-              )}
-              {supplier.transportMode && (
-                <p>Transport Mode: {supplier.transportMode}</p>
-              )}
-            </div>
-          </div>
-
-          {supplier.materials && supplier.materials.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-semibold">Materials</h3>
-              <div className="flex flex-wrap gap-2">
-                {supplier.materials.map((material, index) => (
-                  <Badge key={index} variant="secondary">
-                    {material}
-                  </Badge>
-                ))}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-2 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Supplier Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Name
+                </h3>
+                <p className="text-lg font-medium">{supplier.name}</p>
               </div>
-            </div>
-          )}
+              {supplier.contactInfo && (
+                <>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      Contact
+                    </h3>
+                    <p>{supplier.contactInfo.name}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      Email
+                    </h3>
+                    <p>{supplier.contactInfo.email}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      Phone
+                    </h3>
+                    <p>{supplier.contactInfo.phone}</p>
+                  </div>
+                </>
+              )}
+              {supplier.location && (
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">
+                    Address
+                  </h3>
+                  <p>{supplier.location.address}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          {supplier.certifications && supplier.certifications.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-semibold">Certifications</h3>
+          <Card>
+            <CardHeader>
+              <CardTitle>Materials</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="flex flex-wrap gap-2">
-                {supplier.certifications.map((cert, index) => (
-                  <Badge key={index} variant="outline">
-                    {cert}
-                  </Badge>
-                ))}
+                {supplier.materials &&
+                  supplier.materials.map((material, index) => (
+                    <Badge
+                      key={`material-${supplier.id}-${index}`}
+                      variant="outline"
+                    >
+                      {material}
+                    </Badge>
+                  ))}
+                {(!supplier.materials || supplier.materials.length === 0) && (
+                  <p className="text-sm text-muted-foreground">
+                    No materials available.
+                  </p>
+                )}
               </div>
-            </div>
-          )}
+            </CardContent>
+          </Card>
 
-          {supplier.quality && (
-            <div className="space-y-2">
-              <h3 className="font-semibold">Quality Information</h3>
-              <p>Quality Score: {supplier.quality.score}/100</p>
-              <p>
-                Last Audit:{" "}
-                {new Date(supplier.quality.lastAudit).toLocaleDateString()}
-              </p>
-            </div>
+          {supplier.economicData && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Economic Data</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">
+                    Founded Year
+                  </h3>
+                  <p>{supplier.economicData.foundedYear || "N/A"}</p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">
+                    Annual Revenue
+                  </h3>
+                  <p>
+                    $
+                    {supplier.economicData.annualRevenue?.toLocaleString() ||
+                      "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">
+                    Employee Count
+                  </h3>
+                  <p>
+                    {supplier.economicData.employeeCount?.toLocaleString() ||
+                      "N/A"}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Certifications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {supplier.certifications &&
+                  supplier.certifications.map((cert, index) => (
+                    <Badge
+                      key={`cert-${supplier.id}-${index}`}
+                      variant="outline"
+                    >
+                      {cert}
+                    </Badge>
+                  ))}
+                {(!supplier.certifications ||
+                  supplier.certifications.length === 0) && (
+                  <p className="text-sm text-muted-foreground">
+                    No certifications available.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {supplier.quality && typeof supplier.quality === "object" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Quality Score</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center space-x-2">
+                  <Progress value={supplier.quality.score} className="h-2" />
+                  <span className="text-sm font-medium">
+                    {supplier.quality.score}%
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {supplier.environmentalData && (
-            <div className="space-y-2">
-              <h3 className="font-semibold">Environmental Data</h3>
-              <p>
-                Carbon Footprint: {supplier.environmentalData.carbonFootprint}{" "}
-                kg CO2e
-              </p>
-              {supplier.environmentalData.wasteManagement && (
-                <p>
-                  Waste Management: {supplier.environmentalData.wasteManagement}
-                </p>
-              )}
-              {supplier.environmentalData.energyEfficiency && (
-                <p>
-                  Energy Efficiency:{" "}
-                  {supplier.environmentalData.energyEfficiency}
-                </p>
-              )}
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Environmental Data</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">
+                    Carbon Footprint
+                  </h3>
+                  <p>{supplier.environmentalData.carbonFootprint} kg CO2e</p>
+                </div>
+                {supplier.environmentalData.wasteManagement && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      Waste Management
+                    </h3>
+                    <p>{supplier.environmentalData.wasteManagement}</p>
+                  </div>
+                )}
+                {supplier.environmentalData.energyEfficiency && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      Energy Efficiency
+                    </h3>
+                    <p>{supplier.environmentalData.energyEfficiency}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Location</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[200px] rounded-md border">
+                {supplier.location && supplier.location.coordinates ? (
+                  <SupplierLocationMap
+                    coordinates={supplier.location.coordinates}
+                    name={supplier.name}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                    No location data available
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
 
 function SupplierDetailSkeleton() {
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto py-6 space-y-6 relative z-10 bg-background">
+      <SupplierPageStyles />
       <div className="flex items-center gap-4">
         <Skeleton className="h-10 w-32" />
       </div>

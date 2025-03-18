@@ -41,19 +41,34 @@ interface SupplierComparisonProps {
   materials: RawMaterial[];
 }
 
+// Calculate material coverage with null checks
+const calculateMaterialCoverage = (supplier: Supplier, materials: RawMaterial[]) => {
+  if (!supplier?.materials || !materials?.length) return 0;
+  
+  const coveredMaterials = supplier.materials.filter((materialId) =>
+    materials.some((material) => material.id === materialId)
+  );
+  
+  return (coveredMaterials.length / materials.length) * 100;
+};
+
 export function SupplierComparison({
   suppliers,
   materials,
 }: SupplierComparisonProps) {
+  if (!suppliers?.length || !materials?.length) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <p>Please select suppliers and materials to compare</p>
+      </div>
+    );
+  }
+
   // Calculate comparative metrics
   const comparativeMetrics = useMemo(() => {
     return suppliers.map((supplier) => {
       // Calculate material coverage
-      const materialCoverage =
-        (supplier.materials.filter((m) => materials.some((rm) => rm.name === m))
-          .length /
-          materials.length) *
-        100;
+      const materialCoverage = calculateMaterialCoverage(supplier, materials);
 
       // Calculate certification score (example calculation)
       const certificationScore = supplier.certifications.length * 20; // 20 points per certification, max 100
@@ -93,14 +108,6 @@ export function SupplierComparison({
       };
     });
   }, [suppliers, comparativeMetrics]);
-
-  if (suppliers.length === 0 || materials.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        Select suppliers and materials to compare
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

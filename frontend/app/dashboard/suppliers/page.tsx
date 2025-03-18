@@ -424,7 +424,7 @@ export default function SuppliersPage() {
                     <div className="flex flex-wrap gap-1">
                       {supplier.materials.slice(0, 3).map((material, index) => (
                         <Badge
-                          key={index}
+                          key={`material-${supplier.id}-${index}`}
                           variant="outline"
                           className="text-xs"
                         >
@@ -432,7 +432,11 @@ export default function SuppliersPage() {
                         </Badge>
                       ))}
                       {supplier.materials.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
+                        <Badge
+                          key={`material-more-${supplier.id}`}
+                          variant="outline"
+                          className="text-xs"
+                        >
                           +{supplier.materials.length - 3} more
                         </Badge>
                       )}
@@ -445,7 +449,7 @@ export default function SuppliersPage() {
                   <div className="flex gap-1">
                     {supplier.certifications?.slice(0, 2).map((cert, index) => (
                       <Badge
-                        key={index}
+                        key={`cert-${supplier.id}-${index}`}
                         variant="secondary"
                         className="text-xs"
                       >
@@ -453,7 +457,11 @@ export default function SuppliersPage() {
                       </Badge>
                     ))}
                     {supplier.certifications?.length > 2 && (
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge
+                        key={`cert-more-${supplier.id}`}
+                        variant="secondary"
+                        className="text-xs"
+                      >
                         +{supplier.certifications.length - 2}
                       </Badge>
                     )}

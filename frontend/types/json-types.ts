@@ -264,3 +264,47 @@ export function convertRouteToJson(route: Route): JsonRoute {
     },
   };
 }
+
+// Warehouse JSON type definition
+export interface JsonWarehouse {
+  warehouse_id: string;
+  name: string;
+  location: {
+    address: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+  };
+  capacity: number;
+  utilization: number;
+}
+
+import { Warehouse } from "@/types/types";
+
+export function convertJsonToWarehouse(
+  jsonWarehouse: JsonWarehouse
+): Warehouse {
+  return {
+    id: jsonWarehouse.warehouse_id,
+    name: jsonWarehouse.name,
+    location: jsonWarehouse.location,
+    capacity: jsonWarehouse.capacity,
+    utilization: jsonWarehouse.utilization,
+    environmentalData: {
+      energyEfficiency: 0,
+      wasteManagement: "",
+      carbonFootprint: 0,
+    },
+  };
+}
+
+export function convertWarehouseToJson(warehouse: Warehouse): JsonWarehouse {
+  return {
+    warehouse_id: warehouse.id,
+    name: warehouse.name,
+    location: warehouse.location,
+    capacity: warehouse.capacity,
+    utilization: warehouse.utilization,
+  };
+}

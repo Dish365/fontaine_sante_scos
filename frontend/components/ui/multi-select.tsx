@@ -10,6 +10,7 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
+  CommandList,
 } from "@/components/ui/command";
 import {
   Popover,
@@ -23,11 +24,12 @@ export type Option = {
   value: string;
 };
 
-interface MultiSelectProps {
+export interface MultiSelectProps {
   options: Option[];
   selected: string[];
   onChange: (selected: string[]) => void;
   placeholder?: string;
+  noOptionsMessage?: string;
   className?: string;
 }
 
@@ -36,6 +38,7 @@ export function MultiSelect({
   selected,
   onChange,
   placeholder = "Select options",
+  noOptionsMessage = "No options available",
   className,
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
@@ -102,29 +105,31 @@ export function MultiSelect({
           <CommandInput
             placeholder={`Search ${placeholder.toLowerCase()}...`}
           />
-          <CommandEmpty>No options found.</CommandEmpty>
-          <CommandGroup className="max-h-64 overflow-auto">
-            {options.map((option) => (
-              <CommandItem
-                key={option.value}
-                value={option.value}
-                onSelect={() => {
-                  handleSelect(option.value);
-                  setOpen(true); // Keep the popover open after selection
-                }}
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    selected.includes(option.value)
-                      ? "opacity-100"
-                      : "opacity-0"
-                  )}
-                />
-                {option.label}
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          <CommandList>
+            <CommandEmpty>{noOptionsMessage}</CommandEmpty>
+            <CommandGroup className="max-h-64 overflow-auto">
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.value}
+                  onSelect={() => {
+                    handleSelect(option.value);
+                    setOpen(true); // Keep the popover open after selection
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      selected.includes(option.value)
+                        ? "opacity-100"
+                        : "opacity-0"
+                    )}
+                  />
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
         </Command>
       </PopoverContent>
     </Popover>

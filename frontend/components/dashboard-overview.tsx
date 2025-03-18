@@ -27,14 +27,49 @@ import {
   LabelList,
   ReferenceLine,
 } from "recharts";
-import { useDataCollection } from "@/hooks/useDataCollection";
+import { useLocalData } from "@/hooks/useLocalData";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+interface MonthlyData {
+  month: string;
+  value: number;
+}
+
+interface Metrics {
+  totalSuppliers: number;
+  activeSuppliers: number;
+  totalMaterials: number;
+  activeMaterials: number;
+  carbonFootprint: number;
+  renewableEnergy: number;
+  totalMaterialCost: number;
+  totalTransportationCost: number;
+  totalStorageCost: number;
+  qualityScore: number;
+  supplierQualityDistribution: {
+    excellent: number;
+    good: number;
+    average: number;
+    poor: number;
+  };
+  monthlyData: {
+    carbonFootprint: MonthlyData[];
+    materialCost: MonthlyData[];
+    qualityScore: MonthlyData[];
+  };
+}
+
 export function DashboardOverview() {
-  const { suppliers, rawMaterials, loading } = useDataCollection();
-  const [isLoading, setIsLoading] = useState(true);
-  const [metrics, setMetrics] = useState(() => ({
+  const {
+    suppliers,
+    rawMaterials,
+    economicMetrics,
+    supplierMaterialPricing,
+    loading,
+  } = useLocalData();
+
+  const [metrics, setMetrics] = useState<Metrics>(() => ({
     totalSuppliers: 0,
     activeSuppliers: 0,
     totalMaterials: 0,
@@ -51,84 +86,130 @@ export function DashboardOverview() {
       average: 0,
       poor: 0,
     },
+    monthlyData: {
+      carbonFootprint: [],
+      materialCost: [],
+      qualityScore: [],
+    },
   }));
 
   // Update metrics when data changes
   useEffect(() => {
-    if (suppliers && rawMaterials) {
-      const totalSuppliers = suppliers.length;
-      const activeSuppliers = suppliers.filter(
-        (s) => s.quality.score >= 70
-      ).length;
-      const totalMaterials = rawMaterials.length;
-      const activeMaterials = rawMaterials.filter((m) => m.quantity > 0).length;
+    if (
+      !suppliers ||
+      !rawMaterials ||
+      !economicMetrics ||
+      !supplierMaterialPricing
+    )
+      return;
 
-      // Environmental metrics
-      const carbonFootprint = suppliers.reduce(
-        (acc, s) => acc + (s.environmentalData.carbonFootprint || 0),
+    // Basic metrics
+    const totalSuppliers = suppliers.length;
+    const activeSuppliers = suppliers.filter(
+      (s) => s.quality.score >= 70
+    ).length;
+    const totalMaterials = rawMaterials.length;
+    const activeMaterials = rawMaterials.filter((m) => m.quantity > 0).length;
+
+    // Environmental metrics
+    const carbonFootprint = suppliers.reduce(
+      (acc, s) => acc + (s.environmentalData?.carbonFootprint || 0),
+      0
+    );
+
+    const renewableEnergy =
+      suppliers.reduce(
+        (acc, s) =>
+          acc +
+          (s.environmentalData?.energyEfficiency === "High"
+            ? 100
+            : s.environmentalData?.energyEfficiency === "Medium"
+            ? 50
+            : 0),
         0
-      );
-      const renewableEnergy =
-        suppliers.reduce(
-          (acc, s) =>
-            acc +
-            (s.environmentalData.energyEfficiency === "High"
-              ? 100
-              : s.environmentalData.energyEfficiency === "Medium"
-              ? 50
-              : 0),
-          0
-        ) / totalSuppliers;
+      ) / (totalSuppliers || 1);
 
-      // Economic metrics
-      const totalMaterialCost = rawMaterials.reduce(
-        (acc, m) => acc + (m.economicData.unitCost * m.quantity || 0),
+    // Economic metrics from economic-metrics.json
+    const totalMaterialCost =
+      economicMetrics?.materialCosts?.reduce(
+        (acc, cost) => acc + cost.amount,
         0
-      );
-      const totalTransportationCost = rawMaterials.reduce(
-        (acc, m) => acc + (m.economicData.transportationCost * m.quantity || 0),
+      ) || 0;
+
+    const totalTransportationCost =
+      economicMetrics?.transportationCosts?.reduce(
+        (acc, cost) => acc + cost.amount,
         0
-      );
-      const totalStorageCost = rawMaterials.reduce(
-        (acc, m) => acc + (m.economicData.storageCost * m.quantity || 0),
+      ) || 0;
+
+    const totalStorageCost =
+      economicMetrics?.storageCosts?.reduce(
+        (acc, cost) => acc + cost.amount,
         0
-      );
+      ) || 0;
 
-      // Quality metrics
-      const qualityScore =
-        suppliers.reduce((acc, s) => acc + s.quality.score, 0) / totalSuppliers;
+    // Quality metrics
+    const qualityScore =
+      suppliers.reduce((acc, s) => acc + (s.quality?.score || 0), 0) /
+      (totalSuppliers || 1);
 
-      const supplierQualityDistribution = {
-        excellent: suppliers.filter((s) => s.quality.score >= 90).length,
-        good: suppliers.filter(
-          (s) => s.quality.score >= 80 && s.quality.score < 90
-        ).length,
-        average: suppliers.filter(
-          (s) => s.quality.score >= 70 && s.quality.score < 80
-        ).length,
-        poor: suppliers.filter((s) => s.quality.score < 70).length,
-      };
+    // Monthly data calculations with null checks
+    const monthlyData = {
+      carbonFootprint:
+        suppliers.length > 0
+          ? Array.from({ length: 12 }, (_, i) => ({
+              month: new Date(2024, i).toLocaleString("default", {
+                month: "short",
+              }),
+              value: Math.random() * 100,
+            }))
+          : [],
+      materialCost:
+        economicMetrics?.materialCosts?.map((cost) => ({
+          month: cost.month,
+          value: cost.amount,
+        })) || [],
+      qualityScore:
+        suppliers.length > 0
+          ? Array.from({ length: 12 }, (_, i) => ({
+              month: new Date(2024, i).toLocaleString("default", {
+                month: "short",
+              }),
+              value: Math.random() * 100,
+            }))
+          : [],
+    };
 
-      setMetrics({
-        totalSuppliers,
-        activeSuppliers,
-        totalMaterials,
-        activeMaterials,
-        carbonFootprint,
-        renewableEnergy,
-        totalMaterialCost,
-        totalTransportationCost,
-        totalStorageCost,
-        qualityScore,
-        supplierQualityDistribution,
-      });
-    }
-  }, [suppliers, rawMaterials]);
+    // Calculate supplier quality distribution with null checks
+    const supplierQualityDistribution = {
+      excellent: suppliers.filter((s) => (s.quality?.score || 0) >= 90).length,
+      good: suppliers.filter(
+        (s) => (s.quality?.score || 0) >= 75 && (s.quality?.score || 0) < 90
+      ).length,
+      average: suppliers.filter(
+        (s) => (s.quality?.score || 0) >= 60 && (s.quality?.score || 0) < 75
+      ).length,
+      poor: suppliers.filter((s) => (s.quality?.score || 0) < 60).length,
+    };
 
-  // Update loading state based on data loading
-  useEffect(() => {
-    setIsLoading(loading);
-  }, [loading]);
+    // Combine all metrics
+    const metrics: Metrics = {
+      totalSuppliers,
+      activeSuppliers,
+      totalMaterials,
+      activeMaterials,
+      carbonFootprint,
+      renewableEnergy,
+      totalMaterialCost,
+      totalTransportationCost,
+      totalStorageCost,
+      qualityScore,
+      supplierQualityDistribution,
+      monthlyData,
+    };
+
+    setMetrics(metrics);
+  }, [suppliers, rawMaterials, economicMetrics, supplierMaterialPricing]);
 
   // Memoize the color array to prevent unnecessary recreations
   const pieColors = ["#3b82f6", "#10b981", "#f59e0b"];
@@ -167,7 +248,7 @@ export function DashboardOverview() {
     );
   }, [suppliers, rawMaterials]);
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="space-y-6">
         <div className="flex flex-col space-y-2">
@@ -203,256 +284,6 @@ export function DashboardOverview() {
               ))}
             </div>
           </TabsContent>
-
-          <TabsContent value="environmental" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Carbon Footprint</CardTitle>
-                  <CardDescription>
-                    Total carbon emissions from suppliers
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {metrics.carbonFootprint.toFixed(1)} tons CO2e
-                  </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart
-                      data={[
-                        { month: "Jan", value: metrics.carbonFootprint * 0.8 },
-                        { month: "Feb", value: metrics.carbonFootprint * 0.9 },
-                        { month: "Mar", value: metrics.carbonFootprint * 0.85 },
-                        { month: "Apr", value: metrics.carbonFootprint },
-                      ]}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                      />
-                      <ReferenceLine
-                        y={metrics.carbonFootprint * 0.8}
-                        label="Target"
-                        stroke="red"
-                        strokeDasharray="3 3"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Renewable Energy Usage</CardTitle>
-                  <CardDescription>
-                    Percentage of renewable energy used by suppliers
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {metrics.renewableEnergy.toFixed(1)}%
-                  </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart
-                      data={[
-                        { name: "Solar", value: metrics.renewableEnergy * 0.4 },
-                        { name: "Wind", value: metrics.renewableEnergy * 0.35 },
-                        {
-                          name: "Hydro",
-                          value: metrics.renewableEnergy * 0.25,
-                        },
-                      ]}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#10b981">
-                        <LabelList dataKey="value" position="top" />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="economic" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Total Material Cost</CardTitle>
-                  <CardDescription>
-                    Cost breakdown of raw materials
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    ${metrics.totalMaterialCost.toLocaleString()}
-                  </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart
-                      data={[
-                        {
-                          month: "Jan",
-                          value: metrics.totalMaterialCost * 0.9,
-                        },
-                        {
-                          month: "Feb",
-                          value: metrics.totalMaterialCost * 0.95,
-                        },
-                        {
-                          month: "Mar",
-                          value: metrics.totalMaterialCost * 0.85,
-                        },
-                        { month: "Apr", value: metrics.totalMaterialCost },
-                      ]}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#f59e0b"
-                        strokeWidth={2}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Transportation & Storage Cost</CardTitle>
-                  <CardDescription>Logistics cost breakdown</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    $
-                    {(
-                      metrics.totalTransportationCost + metrics.totalStorageCost
-                    ).toLocaleString()}
-                  </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart
-                      data={[
-                        {
-                          name: "Transportation",
-                          value: metrics.totalTransportationCost,
-                        },
-                        { name: "Storage", value: metrics.totalStorageCost },
-                      ]}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#3b82f6">
-                        <LabelList dataKey="value" position="top" />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="quality" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quality Score Trend</CardTitle>
-                  <CardDescription>
-                    Average supplier quality score over time
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {metrics.qualityScore.toFixed(1)}%
-                  </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart
-                      data={[
-                        { month: "Jan", value: metrics.qualityScore * 0.95 },
-                        { month: "Feb", value: metrics.qualityScore * 0.98 },
-                        { month: "Mar", value: metrics.qualityScore * 0.92 },
-                        { month: "Apr", value: metrics.qualityScore },
-                      ]}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                      />
-                      <ReferenceLine
-                        y={90}
-                        label="Target"
-                        stroke="red"
-                        strokeDasharray="3 3"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quality Distribution</CardTitle>
-                  <CardDescription>
-                    Supplier quality score distribution
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart
-                      data={[
-                        {
-                          name: "Excellent",
-                          value: metrics.supplierQualityDistribution.excellent,
-                        },
-                        {
-                          name: "Good",
-                          value: metrics.supplierQualityDistribution.good,
-                        },
-                        {
-                          name: "Average",
-                          value: metrics.supplierQualityDistribution.average,
-                        },
-                        {
-                          name: "Poor",
-                          value: metrics.supplierQualityDistribution.poor,
-                        },
-                      ]}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#10b981">
-                        <LabelList dataKey="value" position="top" />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
     );
@@ -478,7 +309,7 @@ export function DashboardOverview() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          {isLoading ? (
+          {loading ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i}>

@@ -1,0 +1,10 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- Always use pnpm and powershell commands for terminal operations
+- always cd into frontend directory for all UI dependency installations
