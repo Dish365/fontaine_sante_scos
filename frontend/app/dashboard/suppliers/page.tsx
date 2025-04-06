@@ -1,5 +1,6 @@
 "use client";
 
+import React, { Suspense } from "react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -50,7 +51,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Supplier } from "@/types/types";
 
-export default function SuppliersPage() {
+function SuppliersContent() {
   const router = useRouter();
   const {
     suppliers,
@@ -483,5 +484,13 @@ export default function SuppliersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SuppliersPage() {
+  return (
+    <Suspense fallback={<div>Loading suppliers...</div>}>
+      <SuppliersContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import RouteVisualization from "@/components/RouteVisualization";
@@ -48,7 +48,7 @@ const TEST_ROUTES = [
   }
 ];
 
-export default function VisualizationPage() {
+function VisualizationContent() {
   const router = useRouter();
   const [useTestData, setUseTestData] = useState(false);
 
@@ -92,5 +92,13 @@ export default function VisualizationPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function VisualizationPage() {
+  return (
+    <Suspense fallback={<div>Loading visualization...</div>}>
+      <VisualizationContent />
+    </Suspense>
   );
 }
