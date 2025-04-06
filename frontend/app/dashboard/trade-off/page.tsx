@@ -1,5 +1,6 @@
 "use client";
 
+import React, { Suspense } from "react";
 import { useState, useEffect, useMemo } from "react";
 import {
   ArrowLeft,
@@ -194,36 +195,29 @@ const calculateWeightedScore = (
   supplier: SupplierWithEngineResults,
   preferences: Preferences
 ): number => {
-  // Calculate total weights for each category
-  const totalEconomicWeight = preferences.economic.cost + 
-    preferences.economic.leadTime + 
-    preferences.economic.reliability;
-  
-  const totalQualityWeight = preferences.quality.defectRate + 
-    preferences.quality.durability + 
-    preferences.quality.consistency;
-  
-  const totalEnvironmentalWeight = preferences.environmental.carbonFootprint + 
-    preferences.environmental.waterUsage + 
-    preferences.environmental.wasteProduction;
-  
-  // Calculate total weight across all categories
-  const totalWeight = totalEconomicWeight + totalQualityWeight + totalEnvironmentalWeight;
-  
-  // Normalize category weights (ensure they sum to 1)
-  const economicWeight = totalEconomicWeight / totalWeight;
-  const qualityWeight = totalQualityWeight / totalWeight;
-  const environmentalWeight = totalEnvironmentalWeight / totalWeight;
-  
-  // Calculate weighted score with normalized weights
-  const weightedScore = (
+  // Calculate category weights based on user preferences
+  const economicWeight =
+    (preferences.economic.cost +
+      preferences.economic.leadTime +
+      preferences.economic.reliability) /
+    300;
+  const qualityWeight =
+    (preferences.quality.defectRate +
+      preferences.quality.durability +
+      preferences.quality.consistency) /
+    300;
+  const environmentalWeight =
+    (preferences.environmental.carbonFootprint +
+      preferences.environmental.waterUsage +
+      preferences.environmental.wasteProduction) /
+    300;
+
+  // Calculate weighted score
+  return (
     supplier.engineResults.economic.score * economicWeight +
     supplier.engineResults.quality.score * qualityWeight +
     supplier.engineResults.environmental.score * environmentalWeight
   );
-  
-  // Ensure the score is capped at 100
-  return Math.min(100, Math.round(weightedScore * 10) / 10);
 };
 
 // Gradient descent optimization function
@@ -731,26 +725,15 @@ const SearchableSupplierList = ({
   );
 };
 
-export default function TradeoffPage() {
+function TradeoffContent() {
   const router = useRouter();
   const { toast } = useToast();
 
   // Add state for test data toggle
   const [useTestData, setUseTestData] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [suppliers, setSuppliers] = useState<SupplierWithEngineResults[]>([]);
-  const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
+
+  // Add state for showing detailed factors
   const [showDetailedFactors, setShowDetailedFactors] = useState(false);
-  const [recommendations, setRecommendations] = useState<{
-    primary: SupplierWithEngineResults | null;
-    secondary: SupplierWithEngineResults | null;
-    environmental: SupplierWithEngineResults | null;
-  }>({
-    primary: null,
-    secondary: null,
-    environmental: null
-  });
-  const [activeTab, setActiveTab] = useState("preferences");
 
   // State for preferences
   const [preferences, setPreferences] = useState({
@@ -771,11 +754,32 @@ export default function TradeoffPage() {
     },
   });
 
+  // State for selected suppliers
+  const [selectedSuppliers, setSelectedSuppliers] = useState([
+    "supplier-1",
+    "supplier-2",
+    "supplier-3",
+  ]);
+
+  // State for active tab
+  const [activeTab, setActiveTab] = useState("preferences");
+
   // State for constraints
   const [constraints, setConstraints] = useState({
     minEconomicScore: 70,
     minQualityScore: 70,
     minEnvironmentalScore: 70,
+  });
+
+  // State for supplier recommendations
+  const [recommendations, setRecommendations] = useState<{
+    primary: SupplierWithEngineResults | null;
+    secondary: SupplierWithEngineResults | null;
+    environmental: SupplierWithEngineResults | null;
+  }>({
+    primary: null,
+    secondary: null,
+    environmental: null,
   });
 
   // Default values for reset functionality
@@ -901,124 +905,50 @@ export default function TradeoffPage() {
     }
   };
 
-  // Test data for suppliers with engine results
-  const testSuppliers: SupplierWithEngineResults[] = [
-    {
-      id: "test-supplier-1",
-      name: "Eco Farms Co.",
-      location: "Montreal, Canada",
-      engineResults: {
-        economic: {
-          cost: 85,
-          leadTime: 90,
-          reliability: 88,
-          score: 87.7
-        },
-        quality: {
-          defectRate: 95,
-          durability: 92,
-          consistency: 90,
-          score: 92.3
-        },
-        environmental: {
-          carbonFootprint: 95,
-          waterUsage: 92,
-          wasteProduction: 94,
-          score: 93.7
-        }
-      }
-    },
-    {
-      id: "test-supplier-2",
-      name: "Green Valley Foods",
-      location: "Toronto, Canada",
-      engineResults: {
-        economic: {
-          cost: 78,
-          leadTime: 85,
-          reliability: 82,
-          score: 81.7
-        },
-        quality: {
-          defectRate: 88,
-          durability: 85,
-          consistency: 87,
-          score: 86.7
-        },
-        environmental: {
-          carbonFootprint: 90,
-          waterUsage: 88,
-          wasteProduction: 89,
-          score: 89
-        }
-      }
-    },
-    {
-      id: "test-supplier-3",
-      name: "Sustainable Solutions",
-      location: "Vancouver, Canada",
-      engineResults: {
-        economic: {
-          cost: 92,
-          leadTime: 88,
-          reliability: 90,
-          score: 90
-        },
-        quality: {
-          defectRate: 91,
-          durability: 89,
-          consistency: 92,
-          score: 90.7
-        },
-        environmental: {
-          carbonFootprint: 96,
-          waterUsage: 94,
-          wasteProduction: 95,
-          score: 95
-        }
-      }
-    }
-  ];
-
-  // Update getSupplierData to handle test data
+  // Function to get supplier data
   const getSupplierData = async () => {
     if (useTestData) {
-      setSelectedSuppliers(testSuppliers.map(supplier => supplier.id));
-      setRecommendations({
-        primary: testSuppliers[0],
-        secondary: testSuppliers[1],
-        environmental: testSuppliers[2],
-      });
-      return;
+      return mockEngineResults;
     }
-
+    // In a real implementation, this would fetch from your API
     try {
-      // Your existing API call logic...
+      // TODO: Replace with actual API call
       const response = await fetch("/api/suppliers");
-      if (!response.ok) {
-        throw new Error("Failed to fetch suppliers");
-      }
-      const data = await response.json() as SupplierWithEngineResults[];
-      setSelectedSuppliers(data.map((supplier: SupplierWithEngineResults) => supplier.id));
-      setRecommendations({
-        primary: data[0],
-        secondary: data[1],
-        environmental: data[2],
-      });
+      const data = await response.json();
+      return data;
     } catch (error) {
-      console.error("Error fetching suppliers:", error);
+      console.error("Error fetching supplier data:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch supplier data",
+        description: "Failed to fetch supplier data. Using test data instead.",
+        variant: "destructive",
+      });
+      return mockEngineResults;
+    }
+  };
+
+  // Update handleSubmit to use getSupplierData
+  const handleSubmit = async () => {
+    try {
+      const supplierData = await getSupplierData();
+      optimizeWithGradientDescent(supplierData, preferences, constraints);
+
+      toast({
+        title: "Analysis Complete",
+        description:
+          "Trade-off analysis has been calculated based on engine results.",
+      });
+
+      setActiveTab("results");
+    } catch {
+      toast({
+        title: "Error",
+        description:
+          "Failed to calculate trade-off analysis. Please try again.",
         variant: "destructive",
       });
     }
   };
-
-  // Update useEffect to react to useTestData changes
-  useEffect(() => {
-    getSupplierData();
-  }, [useTestData]); // Add useTestData as a dependency
 
   // Handle save configuration
   const handleSaveConfig = () => {
@@ -1052,153 +982,6 @@ export default function TradeoffPage() {
     });
   };
 
-  // Update handleSubmit to use test data or real data
-  const handleSubmit = async () => {
-    try {
-      setLoading(true);
-      
-      let supplierData;
-      if (useTestData) {
-        supplierData = testSuppliers;
-      } else {
-        const response = await fetch("/api/suppliers");
-        if (!response.ok) {
-          throw new Error("Failed to fetch suppliers");
-        }
-        supplierData = await response.json();
-      }
-
-      const optimizedResults = optimizeWithGradientDescent(
-        supplierData,
-        preferences,
-        constraints
-      );
-
-      setSuppliers(optimizedResults);
-      setRecommendations({
-        primary: optimizedResults[0],
-        secondary: optimizedResults[1],
-        environmental: optimizedResults.find(s => 
-          s.engineResults.environmental.score === 
-          Math.max(...optimizedResults.map(r => r.engineResults.environmental.score))
-        ) || optimizedResults[2]
-      });
-
-      toast({
-        title: "Analysis Complete",
-        description: "Trade-off analysis has been calculated based on engine results.",
-      });
-
-      setActiveTab("results");
-    } catch (error) {
-      console.error("Error in trade-off analysis:", error);
-      toast({
-        title: "Error",
-        description: "Failed to calculate trade-off analysis. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Type-safe supplier mapping function
-  const renderSupplierCard = (supplier: SupplierWithEngineResults) => (
-    <Card key={supplier.id} className="relative">
-      <CardHeader>
-        <CardTitle>{supplier.name}</CardTitle>
-        <CardDescription>{supplier.location}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* Economic Metrics */}
-          <div>
-            <h4 className="font-medium mb-2">Economic Performance</h4>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Cost Efficiency</span>
-                <span>{supplier.engineResults.economic.cost}%</span>
-              </div>
-              <Progress value={supplier.engineResults.economic.cost} className="h-2" />
-              
-              {showDetailedFactors && (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span>Lead Time</span>
-                    <span>{supplier.engineResults.economic.leadTime}%</span>
-                  </div>
-                  <Progress value={supplier.engineResults.economic.leadTime} className="h-2" />
-                  
-                  <div className="flex justify-between text-sm">
-                    <span>Reliability</span>
-                    <span>{supplier.engineResults.economic.reliability}%</span>
-                  </div>
-                  <Progress value={supplier.engineResults.economic.reliability} className="h-2" />
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Quality Metrics */}
-          <div>
-            <h4 className="font-medium mb-2">Quality Performance</h4>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Overall Quality</span>
-                <span>{supplier.engineResults.quality.score}%</span>
-              </div>
-              <Progress value={supplier.engineResults.quality.score} className="h-2" />
-              
-              {showDetailedFactors && (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span>Defect Rate</span>
-                    <span>{supplier.engineResults.quality.defectRate}%</span>
-                  </div>
-                  <Progress value={supplier.engineResults.quality.defectRate} className="h-2" />
-                  
-                  <div className="flex justify-between text-sm">
-                    <span>Consistency</span>
-                    <span>{supplier.engineResults.quality.consistency}%</span>
-                  </div>
-                  <Progress value={supplier.engineResults.quality.consistency} className="h-2" />
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Environmental Metrics */}
-          <div>
-            <h4 className="font-medium mb-2">Environmental Performance</h4>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Overall Impact</span>
-                <span>{supplier.engineResults.environmental.score}%</span>
-              </div>
-              <Progress value={supplier.engineResults.environmental.score} className="h-2" />
-              
-              {showDetailedFactors && (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span>Carbon Footprint</span>
-                    <span>{supplier.engineResults.environmental.carbonFootprint}%</span>
-                  </div>
-                  <Progress value={supplier.engineResults.environmental.carbonFootprint} className="h-2" />
-                  
-                  <div className="flex justify-between text-sm">
-                    <span>Water Usage</span>
-                    <span>{supplier.engineResults.environmental.waterUsage}%</span>
-                  </div>
-                  <Progress value={supplier.engineResults.environmental.waterUsage} className="h-2" />
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
   return (
     <main className="min-h-screen bg-background relative">
       <TradeoffPageStyles />
@@ -1217,11 +1000,13 @@ export default function TradeoffPage() {
             {/* Add Test Data Toggle */}
             <div className="flex items-center space-x-2">
               <Checkbox
-                id="useTestData"
+                id="test-data"
                 checked={useTestData}
-                onCheckedChange={(checked) => setUseTestData(checked as boolean)}
+                onCheckedChange={(checked) =>
+                  setUseTestData(checked as boolean)
+                }
               />
-              <Label htmlFor="useTestData" className="text-sm">
+              <Label htmlFor="test-data" className="text-sm">
                 Use Test Data
               </Label>
             </div>
@@ -2339,5 +2124,13 @@ export default function TradeoffPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function TradeoffPage() {
+  return (
+    <Suspense fallback={<div>Loading trade-off analysis...</div>}>
+      <TradeoffContent />
+    </Suspense>
   );
 }

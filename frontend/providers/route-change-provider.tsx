@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
@@ -18,11 +18,7 @@ const RouteChangeContext = createContext<RouteChangeContextType>({
 
 export const useRouteChange = () => useContext(RouteChangeContext);
 
-export function RouteChangeProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function RouteChangeContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isRouteChanging, setIsRouteChanging] = useState(false);
@@ -103,5 +99,17 @@ export function RouteChangeProvider({
       {isRouteChanging && <LoadingSpinner fullScreen text="Changing page..." />}
       {children}
     </RouteChangeContext.Provider>
+  );
+}
+
+export function RouteChangeProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <Suspense fallback={<LoadingSpinner fullScreen text="Loading..." />}>
+      <RouteChangeContent>{children}</RouteChangeContent>
+    </Suspense>
   );
 }
