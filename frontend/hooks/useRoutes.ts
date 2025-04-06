@@ -1,29 +1,14 @@
-import { useState, useEffect } from "react";
+import { useLocalData } from "./useLocalData";
 import { v4 as uuidv4 } from "uuid";
-import routesData from "@/data/routes.json";
 import type { Route } from "@/types/types";
-import { JsonRoute, convertJsonToRoute } from "@/types/json-types";
 
+/**
+ * Hook for working with route data (uses local JSON data)
+ */
 export function useRoutes() {
-  const [routes, setRoutes] = useState<Route[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { routes, loading, error } = useLocalData();
 
-  useEffect(() => {
-    // Load routes from JSON data
-    try {
-      // Convert JSON format to app format
-      const jsonRoutes = routesData as unknown as JsonRoute[];
-      const convertedRoutes = jsonRoutes.map(convertJsonToRoute);
-      setRoutes(convertedRoutes);
-      setLoading(false);
-    } catch (err) {
-      console.error("Error loading routes:", err);
-      setError("Failed to load routes");
-      setLoading(false);
-    }
-  }, []);
-
+  // Add a new route (in-memory only)
   const addRoute = async (route: Omit<Route, "id">): Promise<Route> => {
     try {
       // Create a new route with ID
@@ -32,13 +17,6 @@ export function useRoutes() {
         id: `route-${uuidv4()}`,
       };
 
-      // Update state
-      setRoutes((prev) => [...prev, newRoute]);
-
-      // Would save to JSON here in a real implementation
-      // const jsonRoute = convertRouteToJson(newRoute);
-      // await saveToJsonFile(jsonRoute);
-
       return newRoute;
     } catch (err) {
       console.error("Error adding route:", err);
@@ -46,6 +24,7 @@ export function useRoutes() {
     }
   };
 
+  // Update an existing route (in-memory only)
   const updateRoute = async (
     id: string,
     updates: Partial<Route>
@@ -62,15 +41,6 @@ export function useRoutes() {
         ...routes[routeIndex],
         ...updates,
       };
-
-      // Update state
-      const updatedRoutes = [...routes];
-      updatedRoutes[routeIndex] = updatedRoute;
-      setRoutes(updatedRoutes);
-
-      // Would save to JSON here in a real implementation
-      // const jsonRoute = convertRouteToJson(updatedRoute);
-      // await updateJsonFile(jsonRoute);
 
       return updatedRoute;
     } catch (err) {

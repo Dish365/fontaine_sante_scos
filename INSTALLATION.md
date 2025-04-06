@@ -19,11 +19,19 @@ cd frontend
 pnpm install
 pnpm add @reactflow/reactflow-renderer react-leaflet leaflet @types/leaflet @radix-ui/react-dropdown-menu @radix-ui/react-tabs lucide-react recharts @tanstack/react-table framer-motion react-hook-form zod
 ```
-```
-Visualisation dependencies
+
+### Visualization Dependencies
+
+```bash
 cd frontend
+# Core mapping and visualization packages
 pnpm install leaflet react-leaflet recharts
+# Additional visualization packages
+pnpm install leaflet-routing-machine
+# Types for TypeScript support
+pnpm install @types/leaflet @types/react-leaflet
 ```
+
 ## 2. Database Setup
 
 ```bash
@@ -88,12 +96,25 @@ pip install -r requirements.txt
 
 ## Critical Dependencies
 
-| Package                 | Purpose                    |
-| ----------------------- | -------------------------- |
-| `@reactflow/reactflow`  | Supply chain visualization |
-| `react-leaflet`         | Interactive maps           |
-| `@tanstack/react-table` | Data tables                |
-| `@radix-ui/*`           | Accessible UI components   |
-| `zod`                   | Data validation            |
-| `@prisma/client`        | Database ORM               |
-| `recharts`              | Analytics charts           |
+| Package                   | Purpose                               |
+| ------------------------- | ------------------------------------- |
+| `@reactflow/reactflow`    | Supply chain visualization            |
+| `leaflet`                 | Core mapping library                  |
+| `react-leaflet`           | React components for Leaflet maps     |
+| `leaflet-routing-machine` | Route visualization with curved lines |
+| `@tanstack/react-table`   | Data tables                           |
+| `@radix-ui/*`             | Accessible UI components              |
+| `zod`                     | Data validation                       |
+| `@prisma/client`          | Database ORM                          |
+| `recharts`                | Analytics charts                      |
+| `lucide-react`            | Icon library for UI elements          |
+| `framer-motion`           | Animation library                     |
+
+## Troubleshooting Map Visualization
+
+If you encounter issues with map markers not displaying:
+
+1. Ensure all dependencies are installed correctly
+2. Check browser console for any errors related to Leaflet
+3. Verify that supplier and warehouse data includes valid coordinates
+4. Try using standard Leaflet markers instead of custom icons if custom markers don't appear

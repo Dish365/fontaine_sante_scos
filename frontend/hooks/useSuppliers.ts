@@ -1,196 +1,70 @@
-import { useState, useEffect } from "react";
+import { useLocalData } from "./useLocalData";
 import { v4 as uuidv4 } from "uuid";
-import suppliersData from "@/data/suppliers.json";
 import type { Supplier } from "@/types/types";
-import {
-  JsonSupplier,
-  convertJsonToSupplier,
-  convertSupplierToJson,
-} from "@/types/json-types";
-import { useLoadingState } from "./useLoadingState";
-import { toast } from "@/components/ui/use-toast";
 
+/**
+ * Hook for working with supplier data (uses local JSON data)
+ */
 export function useSuppliers() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const { loading, startLoading, stopLoading } = useLoadingState(true);
+  const { suppliers, loading, error } = useLocalData();
 
-  // Load suppliers from JSON data
-  useEffect(() => {
-    loadSuppliers();
-  }, []);
-
-  // Load suppliers from JSON data
-  const loadSuppliers = async () => {
-    startLoading();
-    try {
-      // Convert JSON format to app format
-      const jsonSuppliers = suppliersData as unknown as JsonSupplier[];
-      const convertedSuppliers = jsonSuppliers.map(convertJsonToSupplier);
-      setSuppliers(convertedSuppliers);
-      stopLoading();
-    } catch (err) {
-      console.error("Error loading suppliers:", err);
-      setError("Failed to load suppliers");
-      stopLoading();
-      toast({
-        title: "Error",
-        description: "Failed to load suppliers",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // CREATE: Add a new supplier
+  // Add a new supplier (in-memory only)
   const addSupplier = async (
     supplier: Omit<Supplier, "id">
   ): Promise<Supplier> => {
-    startLoading();
     try {
-      // Create a new supplier with ID and default values for required fields
       const newSupplier: Supplier = {
         ...supplier,
         id: `supplier-${uuidv4()}`,
         materials: supplier.materials || [],
-        location: supplier.location || {
-          address: "",
-          coordinates: { lat: 0, lng: 0 },
-        },
-        transportMode: supplier.transportMode || "road",
-        productionCapacity: supplier.productionCapacity || "0 units/month",
-        certifications: supplier.certifications || [],
-        distance: supplier.distance || null,
-        transportationDetails: supplier.transportationDetails || "",
-        performanceHistory: supplier.performanceHistory || "",
-        riskScore:
-          typeof supplier.riskScore === "number" ? supplier.riskScore : 0,
-        contactInfo: supplier.contactInfo || {
-          name: "",
-          email: "",
-          phone: "",
-        },
-        economicData: supplier.economicData || {
-          foundedYear: 0,
-          annualRevenue: 0,
-          employeeCount: 0,
-        },
-        environmentalData: supplier.environmentalData || {
-          carbonFootprint: 0,
-          wasteManagement: "",
-          energyEfficiency: "",
-        },
-        quality: supplier.quality || {
-          score: 0,
-          certifications: [],
-          lastAudit: new Date().toISOString(),
-        },
       };
-
-      // Update state
-      setSuppliers((prev) => [...prev, newSupplier]);
-
-      // In a real implementation, we would save to a backend API
-      // For now, we're just updating the local state
-
-      toast({
-        title: "Success",
-        description: `Supplier ${newSupplier.name} added successfully`,
-      });
-
-      stopLoading();
       return newSupplier;
     } catch (err) {
       console.error("Error adding supplier:", err);
-      stopLoading();
-      toast({
-        title: "Error",
-        description: "Failed to add supplier",
-        variant: "destructive",
-      });
       throw new Error("Failed to add supplier");
     }
   };
 
-  // READ: Get a supplier by ID
+  // Get a supplier by ID
   const getSupplierById = (id: string): Supplier | undefined => {
     return suppliers.find((supplier) => supplier.id === id);
   };
 
-  // UPDATE: Update an existing supplier
+  // Update an existing supplier (in-memory only)
   const updateSupplier = async (
     id: string,
     updates: Partial<Supplier>
   ): Promise<Supplier> => {
-    startLoading();
     try {
-      // Find supplier to update
       const supplierIndex = suppliers.findIndex((s) => s.id === id);
       if (supplierIndex === -1) {
         throw new Error(`Supplier with id ${id} not found`);
       }
 
-      // Create updated supplier
       const updatedSupplier = {
         ...suppliers[supplierIndex],
         ...updates,
       };
-
-      // Update state
-      const updatedSuppliers = [...suppliers];
-      updatedSuppliers[supplierIndex] = updatedSupplier;
-      setSuppliers(updatedSuppliers);
-
-      toast({
-        title: "Success",
-        description: `Supplier ${updatedSupplier.name} updated successfully`,
-      });
-
-      stopLoading();
+      
       return updatedSupplier;
     } catch (err) {
       console.error("Error updating supplier:", err);
-      stopLoading();
-      toast({
-        title: "Error",
-        description: "Failed to update supplier",
-        variant: "destructive",
-      });
       throw new Error("Failed to update supplier");
     }
   };
 
-  // DELETE: Remove a supplier
+  // Delete a supplier (in-memory only)
   const deleteSupplier = async (id: string): Promise<boolean> => {
-    startLoading();
     try {
-      // Check if supplier exists
-      const supplierIndex = suppliers.findIndex((s) => s.id === id);
-      if (supplierIndex === -1) {
+      const supplierExists = suppliers.some((s) => s.id === id);
+      if (!supplierExists) {
         throw new Error(`Supplier with id ${id} not found`);
       }
-
-      const supplierName = suppliers[supplierIndex].name;
-
-      // Remove supplier from state
-      const updatedSuppliers = suppliers.filter((s) => s.id !== id);
-      setSuppliers(updatedSuppliers);
-
-      toast({
-        title: "Success",
-        description: `Supplier ${supplierName} deleted successfully`,
-      });
-
-      stopLoading();
+      
       return true;
     } catch (err) {
       console.error("Error deleting supplier:", err);
-      stopLoading();
-      toast({
-        title: "Error",
-        description: "Failed to delete supplier",
-        variant: "destructive",
-      });
-      return false;
+      throw new Error("Failed to delete supplier");
     }
   };
 
@@ -207,127 +81,66 @@ export function useSuppliers() {
     return suppliers.filter(
       (supplier) =>
         supplier.certifications &&
-        supplier.certifications.some((cert) =>
-          cert.toLowerCase().includes(certification.toLowerCase())
-        )
+        supplier.certifications.includes(certification)
     );
   };
 
   // Get suppliers by transport mode
-  const getSuppliersByTransportMode = (mode: string): Supplier[] => {
+  const getSuppliersByTransportMode = (transportMode: string): Supplier[] => {
     return suppliers.filter(
-      (supplier) =>
-        supplier.transportMode &&
-        supplier.transportMode.toLowerCase().includes(mode.toLowerCase())
+      (supplier) => supplier.transportMode === transportMode
     );
   };
 
-  // Associate a supplier with materials
+  // Associate supplier with materials
   const associateSupplierWithMaterials = async (
     supplierId: string,
     materialIds: string[]
-  ): Promise<Supplier> => {
-    startLoading();
+  ): Promise<void> => {
     try {
-      // Find supplier to update
-      const supplierIndex = suppliers.findIndex((s) => s.id === supplierId);
-      if (supplierIndex === -1) {
-        throw new Error(`Supplier with id ${supplierId} not found`);
-      }
-
-      // Get current supplier
-      const supplier = suppliers[supplierIndex];
-
-      // Create a set of unique material IDs (existing + new)
-      const uniqueMaterialIds = new Set([
-        ...(supplier.materials || []),
-        ...materialIds,
-      ]);
-
-      // Update supplier with new materials
-      const updatedSupplier = {
-        ...supplier,
-        materials: Array.from(uniqueMaterialIds),
-      };
-
-      // Update state
-      const updatedSuppliers = [...suppliers];
-      updatedSuppliers[supplierIndex] = updatedSupplier;
-      setSuppliers(updatedSuppliers);
-
-      toast({
-        title: "Success",
-        description: `Materials associated with ${updatedSupplier.name} successfully`,
-      });
-
-      stopLoading();
-      return updatedSupplier;
+      await updateSupplier(supplierId, { materials: materialIds });
     } catch (err) {
-      console.error("Error associating materials with supplier:", err);
-      stopLoading();
-      toast({
-        title: "Error",
-        description: "Failed to associate materials with supplier",
-        variant: "destructive",
-      });
-      throw new Error("Failed to associate materials with supplier");
+      console.error("Error associating supplier with materials:", err);
+      throw new Error("Failed to associate supplier with materials");
     }
   };
 
-  // Disassociate a supplier from a material
+  // Disassociate supplier from material
   const disassociateSupplierFromMaterial = async (
     supplierId: string,
     materialId: string
-  ): Promise<Supplier> => {
-    startLoading();
+  ): Promise<void> => {
     try {
-      // Find supplier to update
-      const supplierIndex = suppliers.findIndex((s) => s.id === supplierId);
-      if (supplierIndex === -1) {
+      const supplier = getSupplierById(supplierId);
+      if (!supplier) {
         throw new Error(`Supplier with id ${supplierId} not found`);
       }
 
-      // Get current supplier
-      const supplier = suppliers[supplierIndex];
+      const updatedMaterials = supplier.materials
+        ? supplier.materials.filter((id) => id !== materialId)
+        : [];
 
-      // Remove material from supplier's materials
-      const updatedMaterials = (supplier.materials || []).filter(
-        (id) => id !== materialId
-      );
-
-      // Update supplier
-      const updatedSupplier = {
-        ...supplier,
-        materials: updatedMaterials,
-      };
-
-      // Update state
-      const updatedSuppliers = [...suppliers];
-      updatedSuppliers[supplierIndex] = updatedSupplier;
-      setSuppliers(updatedSuppliers);
-
-      toast({
-        title: "Success",
-        description: `Material disassociated from ${updatedSupplier.name} successfully`,
-      });
-
-      stopLoading();
-      return updatedSupplier;
+      await updateSupplier(supplierId, { materials: updatedMaterials });
     } catch (err) {
-      console.error("Error disassociating material from supplier:", err);
-      stopLoading();
-      toast({
-        title: "Error",
-        description: "Failed to disassociate material from supplier",
-        variant: "destructive",
-      });
-      throw new Error("Failed to disassociate material from supplier");
+      console.error("Error disassociating supplier from material:", err);
+      throw new Error("Failed to disassociate supplier from material");
     }
   };
 
-  // Export suppliers to JSON format
-  const exportSuppliersToJson = (): JsonSupplier[] => {
-    return suppliers.map(convertSupplierToJson);
+  // Export suppliers to JSON
+  const exportSuppliersToJson = (): string => {
+    try {
+      return JSON.stringify(suppliers, null, 2);
+    } catch (err) {
+      console.error("Error exporting suppliers to JSON:", err);
+      throw new Error("Failed to export suppliers to JSON");
+    }
+  };
+
+  // Load suppliers (now a no-op since data is loaded by useLocalData)
+  const loadSuppliers = async (): Promise<void> => {
+    // Data is already loaded by useLocalData
+    return Promise.resolve();
   };
 
   return {

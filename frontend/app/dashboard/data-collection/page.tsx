@@ -1,15 +1,13 @@
-import { DataCollectionContainer } from "@/components/data-collection/DataCollectionContainer";
+"use client";
 
-export const metadata = {
-  title: "Data Collection & Mapping | Fontaine Santé Framework",
-  description:
-    "Create a comprehensive inventory of raw materials and map your entire supply chain.",
-};
+import { DataCollection } from "@/components/data-collection";
 
-export default function DataCollection() {
+export default function DashboardDataCollectionPage() {
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <DataCollectionContainer />
-    </div>
+    <main className="min-h-screen bg-background relative">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+        <DataCollection />
+      </div>
+    </main>
   );
 }

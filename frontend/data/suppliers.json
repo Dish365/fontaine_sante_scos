@@ -9,16 +9,11 @@
         "lng": -93.0977
       }
     },
-    "material_id": [
-      "001"
-    ],
+    "material_id": ["001"],
     "transportMode": ["airplane", "ship"],
     "productionCapacity": "45000",
     "quality": {
-      "certifications": [
-        "ISO 22000",
-        "HACCP"
-      ],
+      "certifications": ["ISO 22000", "HACCP"],
       "lastAudit": "2024-01-15"
     },
     "contactInfo": {
@@ -37,21 +32,56 @@
         "lng": -106.4509
       }
     },
-    "material_id": [
-      "002"
-    ],
+    "material_id": ["002"],
     "transportMode": ["train"],
     "productionCapacity": "75000",
     "quality": {
-      "certifications": [
-        "FSSC 22000"
-      ],
+      "certifications": ["FSSC 22000"],
       "lastAudit": "2024-02-10"
     },
     "contactInfo": {
       "name": "Michael Chen",
       "email": "m.chen@globalorganics.ca",
       "phone": "+1-306-555-0456"
+    }
+  },
+  {
+    "id": "supplier-c91102f2-e27b-415d-8edd-fc380c12105f",
+    "name": "Supplier",
+    "location": {
+      "address": "Address",
+      "coordinates": {
+        "lat": 0,
+        "lng": 0
+      }
+    },
+    "materials": ["material-89ee8328-4e12-4aca-80fa-09518d25a140"],
+    "certifications": ["FSSC 22000"],
+    "transportMode": "truck",
+    "distance": null,
+    "transportationDetails": "",
+    "productionCapacity": "1000 units",
+    "performanceHistory": "",
+    "riskScore": 0.3,
+    "quality": {
+      "score": 85,
+      "certifications": ["FSSC 22000"],
+      "lastAudit": "2025-03-14T18:10:07.905Z"
+    },
+    "contactInfo": {
+      "name": "",
+      "email": "",
+      "phone": ""
+    },
+    "economicData": {
+      "foundedYear": 2025,
+      "annualRevenue": 0,
+      "employeeCount": 0
+    },
+    "environmentalData": {
+      "carbonFootprint": 0,
+      "wasteManagement": "",
+      "energyEfficiency": ""
     }
   }
 ]
