@@ -72,6 +72,7 @@ export default function RouteStatistics({
   const [filterMode, setFilterMode] = useState<string | null>(null);
   const [filterWarehouse, setFilterWarehouse] = useState<string | null>(null);
   const [filterSupplier, setFilterSupplier] = useState<string | null>(null);
+  const [filteredRoutes, setFilteredRoutes] = useState<Route[]>(routes);
 
   // Get unique warehouses and suppliers
   const uniqueWarehouses = Array.from(
@@ -82,27 +83,28 @@ export default function RouteStatistics({
 
   // Apply filters
   const applyFilters = () => {
-    let filteredRoutes = [...routes];
+    let newFilteredRoutes = [...routes];
 
     if (filterMode) {
-      filteredRoutes = filteredRoutes.filter(
+      newFilteredRoutes = newFilteredRoutes.filter(
         (r) => r.transport.mode === filterMode
       );
     }
 
     if (filterWarehouse) {
-      filteredRoutes = filteredRoutes.filter(
+      newFilteredRoutes = newFilteredRoutes.filter(
         (r) => r.warehouseId === filterWarehouse
       );
     }
 
     if (filterSupplier) {
-      filteredRoutes = filteredRoutes.filter(
+      newFilteredRoutes = newFilteredRoutes.filter(
         (r) => r.supplierId === filterSupplier
       );
     }
 
-    onFilterChange(filteredRoutes);
+    setFilteredRoutes(newFilteredRoutes);
+    onFilterChange(newFilteredRoutes);
   };
 
   // Handle filter changes
@@ -121,13 +123,16 @@ export default function RouteStatistics({
     setTimeout(applyFilters, 0);
   };
 
-  // Calculate statistics
+  // Calculate statistics using filtered routes
   const calculateTotalDistance = () => {
-    return routes.reduce((total, route) => total + route.transport.distance, 0);
+    return filteredRoutes.reduce(
+      (total, route) => total + route.transport.distance,
+      0
+    );
   };
 
   const calculateTotalCO2 = () => {
-    return routes.reduce(
+    return filteredRoutes.reduce(
       (total, route) =>
         total + route.transport.environmentalImpact.co2Emissions,
       0
@@ -135,22 +140,25 @@ export default function RouteStatistics({
   };
 
   const calculateTotalCost = () => {
-    return routes.reduce((total, route) => total + route.transport.cost, 0);
+    return filteredRoutes.reduce(
+      (total, route) => total + route.transport.cost,
+      0
+    );
   };
 
   const calculateAverageTime = () => {
-    if (routes.length === 0) return 0;
-    const totalTime = routes.reduce(
+    if (filteredRoutes.length === 0) return 0;
+    const totalTime = filteredRoutes.reduce(
       (total, route) => total + route.transport.timeTaken.value,
       0
     );
-    return totalTime / routes.length;
+    return totalTime / filteredRoutes.length;
   };
 
-  // Prepare chart data
+  // Prepare chart data using filtered routes
   const prepareTransportModeData = () => {
     const modeCount: Record<string, number> = {};
-    routes.forEach((route) => {
+    filteredRoutes.forEach((route) => {
       const mode = route.transport.mode;
       modeCount[mode] = (modeCount[mode] || 0) + 1;
     });
@@ -165,7 +173,7 @@ export default function RouteStatistics({
   };
 
   const prepareEmissionsData = () => {
-    return routes.map((route) => ({
+    return filteredRoutes.map((route) => ({
       name: route.id,
       emissions: route.transport.environmentalImpact.co2Emissions,
       color:
@@ -175,7 +183,7 @@ export default function RouteStatistics({
   };
 
   const prepareCostData = () => {
-    return routes.map((route) => ({
+    return filteredRoutes.map((route) => ({
       name: route.id,
       cost: route.transport.cost,
       color:
@@ -184,8 +192,81 @@ export default function RouteStatistics({
     }));
   };
 
+  // Update filtered routes when routes prop changes
+  React.useEffect(() => {
+    setFilteredRoutes(routes);
+  }, [routes]);
+
   return (
     <div className="space-y-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total Distance
+                </p>
+                <p className="text-2xl font-bold">
+                  {calculateTotalDistance().toFixed(2)} km
+                </p>
+              </div>
+              <RouteIcon className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total CO2 Emissions
+                </p>
+                <p className="text-2xl font-bold">
+                  {calculateTotalCO2().toFixed(2)} kg
+                </p>
+              </div>
+              <Zap className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total Cost
+                </p>
+                <p className="text-2xl font-bold">
+                  ${calculateTotalCost().toFixed(2)}
+                </p>
+              </div>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Average Time
+                </p>
+                <p className="text-2xl font-bold">
+                  {calculateAverageTime().toFixed(1)} hrs
+                </p>
+              </div>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-lg">Route Filters</CardTitle>
@@ -255,165 +336,75 @@ export default function RouteStatistics({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total Distance
-                </p>
-                <h3 className="text-2xl font-bold">
-                  {calculateTotalDistance().toLocaleString()} km
-                </h3>
-              </div>
-              <RouteIcon className="h-8 w-8 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle>Transport Mode Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={prepareTransportModeData()}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label
+                  >
+                    {prepareTransportModeData().map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total CO₂ Emissions
-                </p>
-                <h3 className="text-2xl font-bold">
-                  {calculateTotalCO2().toLocaleString()} kg CO₂e
-                </h3>
-              </div>
-              <Zap className="h-8 w-8 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle>CO2 Emissions by Route</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={prepareEmissionsData()}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="emissions" fill="#3b82f6" />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total Cost
-                </p>
-                <h3 className="text-2xl font-bold">
-                  ${calculateTotalCost().toLocaleString()}
-                </h3>
-              </div>
-              <DollarSign className="h-8 w-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Avg. Transit Time
-                </p>
-                <h3 className="text-2xl font-bold">
-                  {calculateAverageTime().toFixed(1)} hours
-                </h3>
-              </div>
-              <Clock className="h-8 w-8 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle>Cost by Route</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={prepareCostData()}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="cost" fill="#10b981" />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
       </div>
-
-      <Tabs defaultValue="transport-modes">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="transport-modes">Transport Modes</TabsTrigger>
-          <TabsTrigger value="emissions">CO₂ Emissions</TabsTrigger>
-          <TabsTrigger value="costs">Transport Costs</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="transport-modes">
-          <Card>
-            <CardHeader>
-              <CardTitle>Transport Mode Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={prepareTransportModeData()}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={true}
-                      label={({ name, percent }) =>
-                        `${name} (${(percent * 100).toFixed(0)}%)`
-                      }
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {prepareTransportModeData().map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="emissions">
-          <Card>
-            <CardHeader>
-              <CardTitle>CO₂ Emissions by Route</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={prepareEmissionsData()}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="emissions" name="CO₂ Emissions (kg CO₂e)">
-                      {prepareEmissionsData().map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="costs">
-          <Card>
-            <CardHeader>
-              <CardTitle>Transport Costs by Route</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={prepareCostData()}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="cost" name="Cost ($)">
-                      {prepareCostData().map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }

@@ -1,6 +1,3 @@
 {
-	"dependencies": {
-		"@types/leaflet-routing-machine": "^3.2.8",
-		"leaflet-routing-machine": "^3.2.12"
-	}
+  "dependencies": {}
 }
