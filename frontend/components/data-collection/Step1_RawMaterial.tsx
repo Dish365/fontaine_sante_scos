@@ -213,15 +213,16 @@ export function Step1RawMaterial({
                           ? rawMaterials.find(
                               (material) =>
                                 material.id === selectedExistingMaterialId
-                            )?.name
+                            )?.name || "Select a material..."
                           : "Select a material..."}
                         <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0">
-                      <Command>
+                      <Command shouldFilter={false}>
                         <CommandInput
                           placeholder="Search materials..."
+                          value={searchQuery}
                           onValueChange={setSearchQuery}
                         />
                         <CommandEmpty className="py-6 text-center text-sm">
@@ -232,12 +233,11 @@ export function Step1RawMaterial({
                             {filteredMaterials.map((material) => (
                               <CommandItem
                                 key={material.id}
-                                value={material.id}
                                 onSelect={() => {
                                   onExistingMaterialSelect(material.id);
                                   setOpen(false);
                                 }}
-                                className="flex items-start gap-2 p-2"
+                                className="flex items-start gap-2 p-2 cursor-pointer"
                               >
                                 <div className="flex-1">
                                   <p className="font-medium">{material.name}</p>

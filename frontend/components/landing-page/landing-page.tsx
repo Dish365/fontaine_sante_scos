@@ -134,7 +134,7 @@ export default function LandingPage() {
           <div className="max-w-3xl mx-auto text-center mb-12">
             <p className="text-lg text-muted-foreground mb-6">
               Fontaine Santé SCA Platform is a comprehensive supply chain
-              analytics platform designed to help food manufacturers optimize
+              analytics platform designed to help the company optimize
               their procurement decisions based on sustainability, quality, and
               economic factors.
             </p>
