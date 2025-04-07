@@ -158,6 +158,8 @@ export default function RouteVisualization({ useTestData = false, testRoutes = [
           <RouteStatistics
             routes={routes}
             onFilterChange={handleFilterChange}
+            warehouses={warehouses}
+            suppliers={suppliers}
           />
         </TabsContent>
       </Tabs>

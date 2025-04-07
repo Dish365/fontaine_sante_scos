@@ -1,7 +1,7 @@
 [
   {
     "route_id": "route-001",
-    "warehouse_id": "wh-1741526443312-jtx5ovf",
+    "warehouse_id": "001",
     "supplier_id": "001",
     "transport": {
       "mode": "truck",
@@ -19,7 +19,7 @@
   },
   {
     "route_id": "route-002",
-    "warehouse_id": "wh-montreal-001",
+    "warehouse_id": "002",
     "supplier_id": "001",
     "transport": {
       "mode": "train",
@@ -37,7 +37,7 @@
   },
   {
     "route_id": "route-003",
-    "warehouse_id": "wh-vancouver-002",
+    "warehouse_id": "003",
     "supplier_id": "002",
     "transport": {
       "mode": "ship",
@@ -55,7 +55,7 @@
   },
   {
     "route_id": "route-004",
-    "warehouse_id": "wh-1741526443312-jtx5ovf",
+    "warehouse_id": "001",
     "supplier_id": "002",
     "transport": {
       "mode": "airplane",
@@ -73,7 +73,7 @@
   },
   {
     "route_id": "route-005",
-    "warehouse_id": "wh-montreal-001",
+    "warehouse_id": "002",
     "supplier_id": "002",
     "transport": {
       "mode": "truck",
@@ -91,7 +91,7 @@
   },
   {
     "route_id": "route-006",
-    "warehouse_id": "wh-vancouver-002",
+    "warehouse_id": "003",
     "supplier_id": "001",
     "transport": {
       "mode": "train",

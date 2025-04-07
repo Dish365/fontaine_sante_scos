@@ -46,6 +46,8 @@ export interface Supplier {
   distance: number | null;
   transportationDetails: string;
   productionCapacity: string;
+  leadTime: number;
+  operatingHours: string;
   performanceHistory: string;
   riskScore: number;
   quality: {
@@ -62,11 +64,18 @@ export interface Supplier {
     foundedYear: number;
     annualRevenue: number;
     employeeCount: number;
+    materialCosts: number;
+    transportationCosts: number;
+    storageCosts: number;
+    totalCost: number;
+    costPerUnit: number;
   };
   environmentalData: {
     carbonFootprint: number;
     wasteManagement: string;
     energyEfficiency: string;
+    waterUsage: number;
+    emissions: number;
   };
 }
 

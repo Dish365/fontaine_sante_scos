@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   BarChart,
   Bar,
@@ -60,6 +62,80 @@ interface Metrics {
   };
 }
 
+// Add mock data
+const mockData = {
+  suppliers: [
+    {
+      id: "1",
+      name: "Test Supplier 1",
+      quality: { score: 85 },
+      environmentalData: {
+        carbonFootprint: 150,
+        energyEfficiency: "High",
+      },
+    },
+    {
+      id: "2",
+      name: "Test Supplier 2",
+      quality: { score: 92 },
+      environmentalData: {
+        carbonFootprint: 120,
+        energyEfficiency: "Medium",
+      },
+    },
+    {
+      id: "3",
+      name: "Test Supplier 3",
+      quality: { score: 65 },
+      environmentalData: {
+        carbonFootprint: 180,
+        energyEfficiency: "Low",
+      },
+    },
+  ],
+  rawMaterials: [
+    {
+      id: "1",
+      name: "Test Material 1",
+      quantity: 150,
+      unit: "kg",
+    },
+    {
+      id: "2",
+      name: "Test Material 2",
+      quantity: 80,
+      unit: "kg",
+    },
+    {
+      id: "3",
+      name: "Test Material 3",
+      quantity: 200,
+      unit: "kg",
+    },
+  ],
+  economicMetrics: {
+    materialCosts: [
+      { month: "Jan", amount: 50000 },
+      { month: "Feb", amount: 55000 },
+      { month: "Mar", amount: 48000 },
+      { month: "Apr", amount: 52000 },
+    ],
+    transportationCosts: [
+      { month: "Jan", amount: 15000 },
+      { month: "Feb", amount: 16000 },
+      { month: "Mar", amount: 14000 },
+      { month: "Apr", amount: 15500 },
+    ],
+    storageCosts: [
+      { month: "Jan", amount: 8000 },
+      { month: "Feb", amount: 8500 },
+      { month: "Mar", amount: 7500 },
+      { month: "Apr", amount: 8200 },
+    ],
+  },
+  supplierMaterialPricing: [],
+};
+
 export function DashboardOverview() {
   const {
     suppliers,
@@ -68,6 +144,19 @@ export function DashboardOverview() {
     supplierMaterialPricing,
     loading,
   } = useLocalData();
+
+  const [useTestData, setUseTestData] = useState(false);
+
+  // Memoize the data object to prevent unnecessary recreations
+  const data = useMemo(() => 
+    useTestData ? mockData : {
+      suppliers,
+      rawMaterials,
+      economicMetrics,
+      supplierMaterialPricing,
+    },
+    [useTestData, suppliers, rawMaterials, economicMetrics, supplierMaterialPricing]
+  );
 
   const [metrics, setMetrics] = useState<Metrics>(() => ({
     totalSuppliers: 0,
@@ -95,30 +184,24 @@ export function DashboardOverview() {
 
   // Update metrics when data changes
   useEffect(() => {
-    if (
-      !suppliers ||
-      !rawMaterials ||
-      !economicMetrics ||
-      !supplierMaterialPricing
-    )
-      return;
+    if (!data.suppliers || !data.rawMaterials || !data.economicMetrics) return;
 
     // Basic metrics
-    const totalSuppliers = suppliers.length;
-    const activeSuppliers = suppliers.filter(
+    const totalSuppliers = data.suppliers.length;
+    const activeSuppliers = data.suppliers.filter(
       (s) => s.quality.score >= 70
     ).length;
-    const totalMaterials = rawMaterials.length;
-    const activeMaterials = rawMaterials.filter((m) => m.quantity > 0).length;
+    const totalMaterials = data.rawMaterials.length;
+    const activeMaterials = data.rawMaterials.filter((m) => m.quantity > 0).length;
 
     // Environmental metrics
-    const carbonFootprint = suppliers.reduce(
+    const carbonFootprint = data.suppliers.reduce(
       (acc, s) => acc + (s.environmentalData?.carbonFootprint || 0),
       0
     );
 
     const renewableEnergy =
-      suppliers.reduce(
+      data.suppliers.reduce(
         (acc, s) =>
           acc +
           (s.environmentalData?.energyEfficiency === "High"
@@ -129,71 +212,65 @@ export function DashboardOverview() {
         0
       ) / (totalSuppliers || 1);
 
-    // Economic metrics from economic-metrics.json
+    // Economic metrics
     const totalMaterialCost =
-      economicMetrics?.materialCosts?.reduce(
+      data.economicMetrics?.materialCosts?.reduce(
         (acc, cost) => acc + cost.amount,
         0
       ) || 0;
 
     const totalTransportationCost =
-      economicMetrics?.transportationCosts?.reduce(
+      data.economicMetrics?.transportationCosts?.reduce(
         (acc, cost) => acc + cost.amount,
         0
       ) || 0;
 
     const totalStorageCost =
-      economicMetrics?.storageCosts?.reduce(
+      data.economicMetrics?.storageCosts?.reduce(
         (acc, cost) => acc + cost.amount,
         0
       ) || 0;
 
     // Quality metrics
     const qualityScore =
-      suppliers.reduce((acc, s) => acc + (s.quality?.score || 0), 0) /
+      data.suppliers.reduce((acc, s) => acc + (s.quality?.score || 0), 0) /
       (totalSuppliers || 1);
 
-    // Monthly data calculations with null checks
+    // Monthly data calculations
     const monthlyData = {
-      carbonFootprint:
-        suppliers.length > 0
-          ? Array.from({ length: 12 }, (_, i) => ({
-              month: new Date(2024, i).toLocaleString("default", {
-                month: "short",
-              }),
-              value: Math.random() * 100,
-            }))
-          : [],
+      carbonFootprint: Array.from({ length: 12 }, (_, i) => ({
+        month: new Date(2024, i).toLocaleString("default", {
+          month: "short",
+        }),
+        value: Math.random() * 100,
+      })),
       materialCost:
-        economicMetrics?.materialCosts?.map((cost) => ({
+        data.economicMetrics?.materialCosts?.map((cost) => ({
           month: cost.month,
           value: cost.amount,
         })) || [],
-      qualityScore:
-        suppliers.length > 0
-          ? Array.from({ length: 12 }, (_, i) => ({
-              month: new Date(2024, i).toLocaleString("default", {
-                month: "short",
-              }),
-              value: Math.random() * 100,
-            }))
-          : [],
+      qualityScore: Array.from({ length: 12 }, (_, i) => ({
+        month: new Date(2024, i).toLocaleString("default", {
+          month: "short",
+        }),
+        value: Math.random() * 100,
+      })),
     };
 
-    // Calculate supplier quality distribution with null checks
+    // Calculate supplier quality distribution
     const supplierQualityDistribution = {
-      excellent: suppliers.filter((s) => (s.quality?.score || 0) >= 90).length,
-      good: suppliers.filter(
+      excellent: data.suppliers.filter((s) => (s.quality?.score || 0) >= 90).length,
+      good: data.suppliers.filter(
         (s) => (s.quality?.score || 0) >= 75 && (s.quality?.score || 0) < 90
       ).length,
-      average: suppliers.filter(
+      average: data.suppliers.filter(
         (s) => (s.quality?.score || 0) >= 60 && (s.quality?.score || 0) < 75
       ).length,
-      poor: suppliers.filter((s) => (s.quality?.score || 0) < 60).length,
+      poor: data.suppliers.filter((s) => (s.quality?.score || 0) < 60).length,
     };
 
     // Combine all metrics
-    const metrics: Metrics = {
+    const newMetrics: Metrics = {
       totalSuppliers,
       activeSuppliers,
       totalMaterials,
@@ -208,8 +285,8 @@ export function DashboardOverview() {
       monthlyData,
     };
 
-    setMetrics(metrics);
-  }, [suppliers, rawMaterials, economicMetrics, supplierMaterialPricing]);
+    setMetrics(newMetrics);
+  }, [data.suppliers, data.rawMaterials, data.economicMetrics]);
 
   // Memoize the color array to prevent unnecessary recreations
   const pieColors = ["#3b82f6", "#10b981", "#f59e0b"];
@@ -252,12 +329,24 @@ export function DashboardOverview() {
     return (
       <div className="space-y-6">
         <div className="flex flex-col space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Dashboard Overview
-          </h1>
-          <p className="text-muted-foreground">
-            Monitor your supply chain metrics and performance indicators
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Dashboard Overview
+              </h1>
+              <p className="text-muted-foreground">
+                Monitor your supply chain metrics and performance indicators
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="test-data"
+                checked={useTestData}
+                onCheckedChange={(checked) => setUseTestData(checked as boolean)}
+              />
+              <Label htmlFor="test-data">Use Test Data</Label>
+            </div>
+          </div>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-4">
@@ -292,12 +381,24 @@ export function DashboardOverview() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Dashboard Overview
-        </h1>
-        <p className="text-muted-foreground">
-          Monitor your supply chain metrics and performance indicators
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Dashboard Overview
+            </h1>
+            <p className="text-muted-foreground">
+              Monitor your supply chain metrics and performance indicators
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="test-data"
+              checked={useTestData}
+              onCheckedChange={(checked) => setUseTestData(checked as boolean)}
+            />
+            <Label htmlFor="test-data">Use Test Data</Label>
+          </div>
+        </div>
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
