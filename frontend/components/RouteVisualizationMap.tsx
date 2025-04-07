@@ -211,74 +211,61 @@ export default function RouteVisualizationMap({
           setTimeout(redrawMap, 100);
           setTimeout(redrawMap, 500);
 
-          if (testMode.enabled && testMode.routes) {
+          if (testMode.enabled && testMode.routes && map) {
             // Test mode visualization code
             testMode.routes.forEach(route => {
               const allPoints = [route.start, ...route.waypoints, route.end];
               const color = TRANSPORT_MODES[route.mode as keyof typeof TRANSPORT_MODES]?.color || '#94a3b8';
               
-              // Add route path with style based on transport mode
-              const routeLine = L.polyline(allPoints, {
-                color: color,
-                weight: 3,
-                opacity: 0.7,
-                dashArray: route.mode === 'airplane' ? '5, 5' : '',
-              });
-
-              if (visibleModes[route.mode]) {
-                routeLine.addTo(map);
-              }
-              
-              testRouteRef.current[route.id] = routeLine;
-
-              // Add markers for each point
-              allPoints.forEach((point, index) => {
-                const isStart = index === 0;
-                const isEnd = index === allPoints.length - 1;
-                const isWaypoint = !isStart && !isEnd;
-                
-                const markerIcon = L.divIcon({
-                  className: 'custom-div-icon',
-                  html: `
-                    <div style="
-                      background-color: ${isStart ? '#3b82f6' : isEnd ? '#ef4444' : '#6366f1'};
-                      width: ${isWaypoint ? '12' : '16'}px;
-                      height: ${isWaypoint ? '12' : '16'}px;
-                      border-radius: 50%;
-                      border: ${isWaypoint ? '2' : '3'}px solid white;
-                      box-shadow: 0 0 ${isWaypoint ? '4' : '5'}px rgba(0,0,0,0.${isWaypoint ? '4' : '5'});
-                    "></div>
-                  `,
-                  iconSize: [isWaypoint ? 20 : 24, isWaypoint ? 20 : 24],
-                  iconAnchor: [isWaypoint ? 10 : 12, isWaypoint ? 10 : 12],
+              try {
+                // Add route path with style based on transport mode
+                const routeLine = L.polyline(allPoints, {
+                  color: color,
+                  weight: 3,
+                  opacity: 0.7,
+                  dashArray: route.mode === 'airplane' ? '5, 5' : '',
                 });
 
-                L.marker([point.lat, point.lng], { icon: markerIcon })
-                  .addTo(map)
-                  .bindTooltip(
-                    isStart ? 'Start Point' :
-                    isEnd ? 'End Point' :
-                    `Waypoint ${index}`,
-                    { permanent: false }
-                  )
-                  .bindPopup(`
-                    <div class="p-2">
-                      <h3 class="font-bold">${isStart ? 'Start Point' : isEnd ? 'End Point' : `Waypoint ${index}`}</h3>
-                      <p class="text-sm text-muted-foreground">${route.mode.charAt(0).toUpperCase() + route.mode.slice(1)} Route</p>
-                      <p class="text-sm">Route ID: ${route.id}</p>
-                    </div>
-                  `);
-              });
-            });
+                if (visibleModes[route.mode]) {
+                  routeLine.addTo(map);
+                }
+                
+                testRouteRef.current[route.id] = routeLine;
 
-            // Fit bounds to show all test routes
-            const allPoints = testMode.routes.flatMap(route => 
-              [route.start, ...route.waypoints, route.end]
-            );
-            const bounds = L.latLngBounds(allPoints);
-            map.fitBounds(bounds, { 
-              padding: [50, 50],
-              maxZoom: 8
+                // Add markers for each point
+                allPoints.forEach((point, index) => {
+                  const isStart = index === 0;
+                  const isEnd = index === allPoints.length - 1;
+                  const isWaypoint = !isStart && !isEnd;
+                  
+                  const markerIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `
+                      <div style="
+                        background-color: ${isStart ? '#3b82f6' : isEnd ? '#ef4444' : '#6366f1'};
+                        width: ${isWaypoint ? '12' : '16'}px;
+                        height: ${isWaypoint ? '12' : '16'}px;
+                        border-radius: 50%;
+                        border: ${isWaypoint ? '2' : '3'}px solid white;
+                        box-shadow: 0 0 ${isWaypoint ? '4' : '5'}px rgba(0,0,0,0.${isWaypoint ? '4' : '5'});
+                      "></div>
+                    `,
+                    iconSize: [isWaypoint ? 12 : 16, isWaypoint ? 12 : 16],
+                    iconAnchor: [isWaypoint ? 6 : 8, isWaypoint ? 6 : 8],
+                  });
+
+                  if (map) {
+                    const marker = L.marker([point.lat, point.lng], { icon: markerIcon });
+                    if (visibleModes[route.mode]) {
+                      marker.addTo(map);
+                    }
+                    const markerId = `${route.id}-${index}`;
+                    testMarkerRef.current[markerId] = marker;
+                  }
+                });
+              } catch (error) {
+                console.error('Error adding route or markers:', error);
+              }
             });
           } else if (dataReady) {
             // Real data visualization code...
@@ -481,13 +468,29 @@ export default function RouteVisualizationMap({
   useEffect(() => {
     if (!mapInstanceRef.current || !testMode?.enabled || !testMode?.routes) return;
 
-    testMode.routes.forEach(route => {
-      const routeLine = testRouteRef.current[route.id];
-      if (routeLine) {
+    const map = mapInstanceRef.current;
+
+    // Update route lines visibility
+    Object.entries(testRouteRef.current).forEach(([routeId, routeLine]) => {
+      const route = testMode.routes?.find(r => r.id === routeId);
+      if (route && routeLine) {
         if (visibleModes[route.mode]) {
-          routeLine.addTo(mapInstanceRef.current!);
+          routeLine.addTo(map);
         } else {
           routeLine.remove();
+        }
+      }
+    });
+
+    // Update markers visibility
+    Object.entries(testMarkerRef.current).forEach(([markerId, marker]) => {
+      const [routeId] = markerId.split('-');
+      const route = testMode.routes?.find(r => r.id === routeId);
+      if (route && marker) {
+        if (visibleModes[route.mode]) {
+          marker.addTo(map);
+        } else {
+          marker.remove();
         }
       }
     });
@@ -513,84 +516,47 @@ export default function RouteVisualizationMap({
     if (!map || !testMode?.enabled || !positions || !routes) return;
 
     const updateMarkers = async () => {
-      const L = (await import('leaflet')).default;
-      
-      // Create or update markers for each route
-      routes.forEach(route => {
-        const position = positions[route.id];
-        if (!position) return;
+      if (!mapInstanceRef.current || !isClient) return;
 
-        const getTransportIcon = (mode: string) => {
-          let svgPath = '';
-          switch (mode) {
-            case 'train':
-              svgPath = '<path d="M4 15h16a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1zM4 5h16v8H4V5z"/><path d="M4 19h16a1 1 0 0 0 1-1v-2H3v2a1 1 0 0 0 1 1z"/>';
-              break;
-            case 'ship':
-              svgPath = '<path d="M20 21c-3.5 0-7-1.5-7-1.5s-3.5 1.5-7 1.5-4-1.5-4-1.5V3l4 2 7-2 7 2 4-2v16.5S23.5 21 20 21z"/>';
-              break;
-            case 'airplane':
-              svgPath = '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>';
-              break;
-            case 'truck':
-            default:
-              svgPath = '<path d="M20 8h-9l-2-3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/><path d="M2 10h20"/>';
+      try {
+        const L = (await import('leaflet')).default;
+        const map = mapInstanceRef.current;
+
+        // Clear existing markers
+        markersRef.current.forEach(marker => marker.remove());
+        markersRef.current = [];
+
+        // Add new markers
+        suppliers.forEach(supplier => {
+          const coords = getCoordinates(supplier.location);
+          if (coords[0] !== null && coords[1] !== null && map) {
+            const marker = L.marker(coords as [number, number])
+              .addTo(map)
+              .bindTooltip(supplier.name, {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -10]
+              });
+            markersRef.current.push(marker);
           }
+        });
 
-          const color = TRANSPORT_MODES[route.mode as keyof typeof TRANSPORT_MODES]?.color || '#94a3b8';
-          
-          return L.divIcon({
-            className: 'custom-div-icon',
-            html: `
-              <div style="
-                background-color: white;
-                width: 32px;
-                height: 32px;
-                border-radius: 50%;
-                border: 2px solid ${color};
-                box-shadow: 0 0 4px rgba(0,0,0,0.4);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              ">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  ${svgPath}
-                </svg>
-              </div>
-            `,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16],
-          });
-        };
-
-        if (!testMarkerRef.current[route.id]) {
-          const icon = getTransportIcon(route.mode);
-          testMarkerRef.current[route.id] = L.marker(
-            [position.lat, position.lng],
-            { icon }
-          )
-          .addTo(map)
-          .bindTooltip(`${route.mode.charAt(0).toUpperCase() + route.mode.slice(1)} Transport`, { 
-            permanent: false,
-            offset: [0, -10]
-          })
-          .bindPopup(`
-            <div class="p-2">
-              <h3 class="font-bold">Active ${route.mode.charAt(0).toUpperCase() + route.mode.slice(1)} Route</h3>
-              <p class="text-sm text-muted-foreground">Transport Mode: ${route.mode.charAt(0).toUpperCase() + route.mode.slice(1)}</p>
-              <div class="mt-2 space-y-1">
-                <p class="text-xs">Route ID: ${route.id}</p>
-                <p class="text-xs">Status: In Transit</p>
-              </div>
-            </div>
-          `);
-        } else {
-          testMarkerRef.current[route.id].setLatLng([
-            position.lat,
-            position.lng
-          ]);
-        }
-      });
+        warehouses.forEach(warehouse => {
+          const coords = getCoordinates(warehouse.location);
+          if (coords[0] !== null && coords[1] !== null && map) {
+            const marker = L.marker(coords as [number, number])
+              .addTo(map)
+              .bindTooltip(warehouse.name, {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -10]
+              });
+            markersRef.current.push(marker);
+          }
+        });
+      } catch (error) {
+        console.error('Error updating markers:', error);
+      }
     };
 
     updateMarkers();

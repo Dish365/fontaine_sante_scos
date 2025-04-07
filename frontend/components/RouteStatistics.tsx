@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Route } from "@/types/types";
+import { Route, Supplier, Warehouse } from "@/types/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -63,22 +63,43 @@ const TRANSPORT_MODES = {
 interface RouteStatisticsProps {
   routes: Route[];
   onFilterChange: (filteredRoutes: Route[]) => void;
+  warehouses: Warehouse[];
+  suppliers: Supplier[];
 }
 
 export default function RouteStatistics({
   routes,
   onFilterChange,
+  warehouses,
+  suppliers,
 }: RouteStatisticsProps) {
   const [filterMode, setFilterMode] = useState<string | null>(null);
   const [filterWarehouse, setFilterWarehouse] = useState<string | null>(null);
   const [filterSupplier, setFilterSupplier] = useState<string | null>(null);
   const [filteredRoutes, setFilteredRoutes] = useState<Route[]>(routes);
 
-  // Get unique warehouses and suppliers
+  // Get unique warehouses and suppliers with their names
   const uniqueWarehouses = Array.from(
     new Set(routes.map((r) => r.warehouseId))
-  );
-  const uniqueSuppliers = Array.from(new Set(routes.map((r) => r.supplierId)));
+  ).map(id => {
+    const warehouse = warehouses.find(w => w.id === id);
+    console.log('Warehouse mapping:', { id, found: warehouse, name: warehouse?.name });
+    return {
+      id,
+      name: warehouse?.name || `Warehouse ${id}`  // Provide a more user-friendly fallback
+    };
+  });
+
+  const uniqueSuppliers = Array.from(
+    new Set(routes.map((r) => r.supplierId))
+  ).map(id => {
+    const supplier = suppliers.find(s => s.id === id);
+    return {
+      id,
+      name: supplier?.name || `Supplier ${id}`  // Match the warehouse fallback style
+    };
+  });
+
   const uniqueModes = Array.from(new Set(routes.map((r) => r.transport.mode)));
 
   // Apply filters
@@ -87,7 +108,7 @@ export default function RouteStatistics({
 
     if (filterMode) {
       newFilteredRoutes = newFilteredRoutes.filter(
-        (r) => r.transport.mode === filterMode
+        (r) => r.transport.mode.toLowerCase() === filterMode.toLowerCase()
       );
     }
 
@@ -110,7 +131,13 @@ export default function RouteStatistics({
   // Handle filter changes
   const handleModeChange = (value: string) => {
     setFilterMode(value === "all" ? null : value);
-    setTimeout(applyFilters, 0);
+    setTimeout(() => {
+      const newFilteredRoutes = value === "all" 
+        ? [...routes]
+        : routes.filter(r => r.transport.mode.toLowerCase() === value.toLowerCase());
+      setFilteredRoutes(newFilteredRoutes);
+      onFilterChange(newFilteredRoutes);
+    }, 0);
   };
 
   const handleWarehouseChange = (value: string) => {
@@ -159,16 +186,14 @@ export default function RouteStatistics({
   const prepareTransportModeData = () => {
     const modeCount: Record<string, number> = {};
     filteredRoutes.forEach((route) => {
-      const mode = route.transport.mode;
+      const mode = route.transport.mode.toLowerCase();
       modeCount[mode] = (modeCount[mode] || 0) + 1;
     });
 
     return Object.entries(modeCount).map(([mode, count]) => ({
       name: mode.charAt(0).toUpperCase() + mode.slice(1),
       value: count,
-      color:
-        TRANSPORT_MODES[mode as keyof typeof TRANSPORT_MODES]?.color ||
-        "#94a3b8",
+      color: TRANSPORT_MODES[mode as keyof typeof TRANSPORT_MODES]?.color || "#94a3b8",
     }));
   };
 
@@ -176,9 +201,7 @@ export default function RouteStatistics({
     return filteredRoutes.map((route) => ({
       name: route.id,
       emissions: route.transport.environmentalImpact.co2Emissions,
-      color:
-        TRANSPORT_MODES[route.transport.mode as keyof typeof TRANSPORT_MODES]
-          ?.color || "#94a3b8",
+      color: TRANSPORT_MODES[route.transport.mode.toLowerCase() as keyof typeof TRANSPORT_MODES]?.color || "#94a3b8",
     }));
   };
 
@@ -186,9 +209,7 @@ export default function RouteStatistics({
     return filteredRoutes.map((route) => ({
       name: route.id,
       cost: route.transport.cost,
-      color:
-        TRANSPORT_MODES[route.transport.mode as keyof typeof TRANSPORT_MODES]
-          ?.color || "#94a3b8",
+      color: TRANSPORT_MODES[route.transport.mode.toLowerCase() as keyof typeof TRANSPORT_MODES]?.color || "#94a3b8",
     }));
   };
 
@@ -304,9 +325,9 @@ export default function RouteStatistics({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Warehouses</SelectItem>
-                  {uniqueWarehouses.map((id) => (
+                  {uniqueWarehouses.map(({ id, name }) => (
                     <SelectItem key={id} value={id}>
-                      {id}
+                      {name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -324,9 +345,9 @@ export default function RouteStatistics({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Suppliers</SelectItem>
-                  {uniqueSuppliers.map((id) => (
+                  {uniqueSuppliers.map(({ id, name }) => (
                     <SelectItem key={id} value={id}>
-                      {id}
+                      {name}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Building2,
   Warehouse,
-  Route,
+  Route as RouteIcon,
   Package,
   Plus,
   Pencil,
@@ -19,6 +19,11 @@ import {
   Lock,
   ArrowLeft,
 } from "lucide-react";
+import suppliersData from "@/data/suppliers.json";
+import warehousesData from "@/data/warehouses.json";
+import routesData from "@/data/routes.json";
+import materialsData from "@/data/materials.json";
+import { Route } from "@/types/types";
 import {
   Card,
   CardContent,
@@ -131,6 +136,15 @@ const mockMaterials = [
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState("general");
+  const [useTestData, setUseTestData] = useState(true);
+
+  // Get the actual data lengths
+  const actualDataStats = {
+    suppliers: suppliersData.length,
+    warehouses: warehousesData.length,
+    routes: routesData.length,
+    materials: materialsData.length
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -353,6 +367,78 @@ export default function Settings() {
 
           {/* Data Management Tab */}
           <TabsContent value="data" className="space-y-8">
+            {/* Data Source Configuration */}
+            <Card className="w-full max-w-4xl mx-auto">
+              <CardHeader>
+                <CardTitle>Data Source Configuration</CardTitle>
+                <CardDescription>
+                  Configure data sources and test data settings
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Use Test Data</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Toggle between test data and production data
+                      </p>
+                    </div>
+                    <Switch
+                      id="use-test-data"
+                      checked={useTestData}
+                      onCheckedChange={setUseTestData}
+                    />
+                  </div>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label>Current Data Source</Label>
+                    <p className="text-sm">
+                      {useTestData ? (
+                        <Badge variant="secondary">Test Data</Badge>
+                      ) : (
+                        <Badge variant="default">Production Data</Badge>
+                      )}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {useTestData
+                        ? "Using predefined test data for development and testing"
+                        : "Using actual data from the database"}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data Statistics</Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Suppliers</p>
+                        <p className="text-2xl font-bold">
+                          {useTestData ? mockSuppliers.length : actualDataStats.suppliers}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Warehouses</p>
+                        <p className="text-2xl font-bold">
+                          {useTestData ? mockWarehouses.length : actualDataStats.warehouses}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Routes</p>
+                        <p className="text-2xl font-bold">
+                          {useTestData ? mockRoutes.length : actualDataStats.routes}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">Materials</p>
+                        <p className="text-2xl font-bold">
+                          {useTestData ? mockMaterials.length : actualDataStats.materials}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="flex justify-end gap-2 px-4 max-w-4xl mx-auto">
               <Button variant="outline">
                 <Download className="mr-2 h-4 w-4" />
@@ -385,7 +471,7 @@ export default function Settings() {
                     value="routes"
                     className="flex items-center gap-2"
                   >
-                    <Route className="h-4 w-4" />
+                    <RouteIcon className="h-4 w-4" />
                     Routes
                   </TabsTrigger>
                   <TabsTrigger
