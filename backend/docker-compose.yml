@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  django:
+    build: 
+      context: ./django_backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_DEBUG=True
+      - DJANGO_SECRET_KEY=your-secret-key-here
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000
+    volumes:
+      - ./django_backend:/app
+    depends_on:
+      - redis
+      - db
+
+  economic:
+    build:
+      context: ./fastapi_economic
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./fastapi_economic:/app
+    environment:
+      - ENVIRONMENT=development
+
+  environmental:
+    build:
+      context: ./fastapi_environmental
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./fastapi_environmental:/app
+    environment:
+      - ENVIRONMENT=development
+
+  quality:
+    build:
+      context: ./fastapi_quality
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./fastapi_quality:/app
+    environment:
+      - ENVIRONMENT=development
+
+  tradeoff:
+    build:
+      context: ./fastapi_tradeoff
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8000"
+    volumes:
+      - ./fastapi_tradeoff:/app
+    environment:
+      - ENVIRONMENT=development
+
+  db:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=fontaine_sante_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:6
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data: 

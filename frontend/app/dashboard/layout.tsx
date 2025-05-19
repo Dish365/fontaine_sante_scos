@@ -9,10 +9,15 @@ export default function DashboardLayout({
 }) {
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden">
+      <div className="flex min-h-screen w-full overflow-hidden bg-background">
         <AppSidebar />
-        <main className="flex-1 overflow-auto w-full pl-[80px] md:pl-0">
-          {children}
+        <main className="flex-1 overflow-auto w-full relative min-h-screen
+          ml-[80px] lg:ml-[280px] /* Use margin instead of padding */
+          transition-all duration-300
+        ">
+          <div className="h-full w-full">
+            {children}
+          </div>
         </main>
       </div>
     </SidebarProvider>
