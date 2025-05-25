@@ -613,4 +613,42 @@ class CalculationService:
             "volatility": volatility,
             "latest_value": values[-1],
             "average": sum(values) / len(values)
-        } 
+        }
+
+    def _calculate_transportation_emissions(
+        self,
+        transport_mode: str,
+        distance: float,
+        volume: float
+    ) -> float:
+        """
+        Calculate carbon emissions from transportation based on mode, distance, and volume.
+        
+        Args:
+            transport_mode: The mode of transportation (truck, train, ship, airplane)
+            distance: Distance in kilometers
+            volume: Volume of goods in cubic meters
+            
+        Returns:
+            float: Carbon emissions in kg CO2e
+        """
+        # Emission factors (kg CO2e per ton-km) for different transport modes
+        # These are approximate values and should be updated with actual data
+        EMISSION_FACTORS = {
+            "truck": 0.162,  # kg CO2e per ton-km
+            "train": 0.041,  # kg CO2e per ton-km
+            "ship": 0.017,   # kg CO2e per ton-km
+            "airplane": 0.602  # kg CO2e per ton-km
+        }
+        
+        # Convert volume to weight (assuming average density of 1 ton per cubic meter)
+        # This is a simplification - in practice, you would use actual weight
+        weight = volume  # in tons
+        
+        # Get emission factor for the transport mode
+        emission_factor = EMISSION_FACTORS.get(transport_mode.lower(), EMISSION_FACTORS["truck"])
+        
+        # Calculate emissions
+        emissions = distance * weight * emission_factor
+        
+        return emissions 
