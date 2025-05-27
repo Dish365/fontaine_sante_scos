@@ -8,17 +8,18 @@ from .middleware.logging import LoggingMiddleware
 from .middleware.auth import AuthMiddleware
 from .exceptions import CalculationError, ValidationError, ConfigurationError, ServiceError
 from .engines import economic, quality, environmental, tradeoff
+from .routers import suppliers, orders
 
 app = FastAPI(
-    title="Supply Chain Optimization API",
-    description="API for supply chain optimization and analysis",
+    title="Supplier Management API",
+    description="API for supplier management and analytics",
     version="1.0.0"
 )
 
 # Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=["*"],  # Update this with your Django app's URL in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,10 +28,8 @@ app.add_middleware(LoggingMiddleware)
 app.add_middleware(AuthMiddleware)
 
 # Include routers
-app.include_router(economic.router, prefix="/api/v1/economic", tags=["Economic"])
-app.include_router(quality.router, prefix="/api/v1/quality", tags=["Quality"])
-app.include_router(environmental.router, prefix="/api/v1/environmental", tags=["Environmental"])
-app.include_router(tradeoff.router, prefix="/api/v1/tradeoff", tags=["Tradeoff"])
+app.include_router(suppliers.router)
+app.include_router(orders.router)
 
 # Exception handlers
 @app.exception_handler(CalculationError)
@@ -77,6 +76,6 @@ async def service_error_handler(request: Request, exc: ServiceError):
         }
     )
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Supplier Management API"}
