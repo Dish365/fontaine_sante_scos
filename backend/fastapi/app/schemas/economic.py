@@ -16,10 +16,10 @@ class EconomicScoreOutput(BaseModel):
     supplier_id: int = Field(..., description="Unique identifier for the supplier")
     score: float = Field(..., description="Economic performance score")
     cost_breakdown: Dict[str, float] = Field(..., description="Breakdown of costs by category")
-    recommendations: List[str] = Field(..., description="Cost optimization recommendations")
+    #recommendations: List[str] = Field(..., description="Cost optimization recommendations")
     total_cost: float = Field(..., description="Total cost of the supply chain")
-    cost_per_unit: float = Field(..., description="Cost per unit")
-    roi: float = Field(..., description="Return on investment")
+    #cost_per_unit: float = Field(..., description="Cost per unit")
+    #roi: float = Field(..., description="Return on investment")
     
 class OptimizationResult(BaseModel):
     optimal_allocation: Dict[int, float] = Field(..., description="Optimal allocation of orders to suppliers")

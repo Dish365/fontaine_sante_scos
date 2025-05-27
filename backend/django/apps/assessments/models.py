@@ -5,7 +5,7 @@ from apps.suppliers.models import Supplier
 class Assessment(models.Model):
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='assessments')
     title = models.CharField(max_length=200)
-    description = models.TextField()
+    description = models.TextField(max_length=250)
     status = models.CharField(max_length=50, choices=[
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),
