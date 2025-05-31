@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils.translation import gettext_lazy as _
 import uuid
 
 class Material(models.Model):
@@ -69,6 +70,7 @@ class Supplier(models.Model):
     )
     transportation_details = models.TextField(
         blank=True,
+        null=True,
         help_text="Additional details about transportation methods and capabilities"
     )
     
@@ -251,7 +253,7 @@ class SupplierAssessment(models.Model):
     supplier = models.ForeignKey(
         Supplier, 
         on_delete=models.CASCADE, 
-        related_name='assessments'
+        related_name='supplier_assessments'
     )
     title = models.CharField(max_length=200)
     description = models.TextField()
@@ -283,4 +285,138 @@ class SupplierAssessment(models.Model):
         ordering = ['-assessment_date', '-created_at']
         
     def __str__(self):
-        return f"{self.title} - {self.supplier.name}" 
+        return f"{self.title} - {self.supplier.name}"
+
+class TransportMode(models.TextChoices):
+    TRUCK = 'truck', _('Truck')
+    TRAIN = 'train', _('Train')
+    SHIP = 'ship', _('Ship')
+    PLANE = 'plane', _('Plane')
+
+class VehicleType(models.TextChoices):
+    SMALL_TRUCK = 'small_truck', _('Small Truck (< 3.5 tons)')
+    MEDIUM_TRUCK = 'medium_truck', _('Medium Truck (3.5-16 tons)')
+    LARGE_TRUCK = 'large_truck', _('Large Truck (> 16 tons)')
+    ELECTRIC_VEHICLE = 'electric_vehicle', _('Electric Vehicle')
+    HYBRID_VEHICLE = 'hybrid_vehicle', _('Hybrid Vehicle')
+
+class FuelType(models.TextChoices):
+    DIESEL = 'diesel', _('Diesel')
+    PETROL = 'petrol', _('Petrol')
+    ELECTRIC = 'electric', _('Electric')
+    HYBRID = 'hybrid', _('Hybrid')
+    BIODIESEL = 'biodiesel', _('Biodiesel')
+    CNG = 'cng', _('Compressed Natural Gas')
+
+class TransportationEmission(models.Model):
+    supplier = models.ForeignKey(
+        'Supplier',
+        on_delete=models.CASCADE,
+        related_name='transportation_emissions'
+    )
+    distance = models.FloatField(
+        validators=[MinValueValidator(0)],
+        help_text=_('Distance in kilometers')
+    )
+    volume = models.FloatField(
+        validators=[MinValueValidator(0)],
+        help_text=_('Volume in cubic meters')
+    )
+    transport_mode = models.CharField(
+        max_length=20,
+        choices=TransportMode.choices,
+        help_text=_('Mode of transportation')
+    )
+    vehicle_type = models.CharField(
+        max_length=20,
+        choices=VehicleType.choices,
+        null=True,
+        blank=True,
+        help_text=_('Type of vehicle (required for road transport)')
+    )
+    fuel_type = models.CharField(
+        max_length=20,
+        choices=FuelType.choices,
+        null=True,
+        blank=True,
+        help_text=_('Type of fuel used')
+    )
+    load_factor = models.FloatField(
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+        help_text=_('Load factor (0-1) representing how full the vehicle is')
+    )
+    return_trip = models.BooleanField(
+        default=False,
+        help_text=_('Whether to include return trip emissions')
+    )
+    total_emissions = models.FloatField(
+        validators=[MinValueValidator(0)],
+        help_text=_('Total emissions in kg CO2e')
+    )
+    emissions_per_km = models.FloatField(
+        validators=[MinValueValidator(0)],
+        help_text=_('Emissions per kilometer')
+    )
+    emissions_per_volume = models.FloatField(
+        validators=[MinValueValidator(0)],
+        help_text=_('Emissions per cubic meter')
+    )
+    transport_efficiency_score = models.FloatField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text=_('Transport efficiency score (0-100)')
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = _('Transportation Emission')
+        verbose_name_plural = _('Transportation Emissions')
+
+    def __str__(self):
+        return f"{self.supplier.name} - {self.transport_mode} - {self.created_at.date()}"
+
+class EmissionFactor(models.Model):
+    transport_mode = models.CharField(
+        max_length=20,
+        choices=TransportMode.choices,
+        help_text=_('Mode of transportation')
+    )
+    vehicle_type = models.CharField(
+        max_length=20,
+        choices=VehicleType.choices,
+        null=True,
+        blank=True,
+        help_text=_('Type of vehicle (for road transport)')
+    )
+    fuel_type = models.CharField(
+        max_length=20,
+        choices=FuelType.choices,
+        null=True,
+        blank=True,
+        help_text=_('Type of fuel used')
+    )
+    base_emission_factor = models.FloatField(
+        validators=[MinValueValidator(0)],
+        help_text=_('Base emission factor in kg CO2e per km')
+    )
+    volume_factor = models.FloatField(
+        validators=[MinValueValidator(0)],
+        help_text=_('Volume impact factor')
+    )
+    load_factor_impact = models.FloatField(
+        validators=[MinValueValidator(0)],
+        help_text=_('Load factor impact on emissions')
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['transport_mode', 'vehicle_type', 'fuel_type']
+        ordering = ['transport_mode', 'vehicle_type', 'fuel_type']
+        verbose_name = _('Emission Factor')
+        verbose_name_plural = _('Emission Factors')
+
+    def __str__(self):
+        return f"{self.transport_mode} - {self.vehicle_type or 'N/A'} - {self.fuel_type or 'N/A'}" 

@@ -1,5 +1,14 @@
 from rest_framework import serializers
-from .models import Supplier, Material, SupplierMaterial, SupplierAssessment, Order, OrderItem
+from .models import (
+    Supplier,
+    Material,
+    SupplierMaterial,
+    SupplierAssessment,
+    Order,
+    OrderItem,
+    TransportationEmission,
+    EmissionFactor
+)
 
 class MaterialSerializer(serializers.ModelSerializer):
     class Meta:
@@ -111,4 +120,65 @@ class SupplierCreateSerializer(serializers.ModelSerializer):
                 lead_time=material_data.get('lead_time', 0)
             )
         
-        return supplier 
+        return supplier
+
+class TransportationEmissionSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    recommendations = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TransportationEmission
+        fields = [
+            'id',
+            'supplier',
+            'supplier_name',
+            'distance',
+            'volume',
+            'transport_mode',
+            'vehicle_type',
+            'fuel_type',
+            'load_factor',
+            'return_trip',
+            'total_emissions',
+            'emissions_per_km',
+            'emissions_per_volume',
+            'transport_efficiency_score',
+            'recommendations',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = [
+            'total_emissions',
+            'emissions_per_km',
+            'emissions_per_volume',
+            'transport_efficiency_score'
+        ]
+
+    def get_recommendations(self, obj):
+        from ..services.transportation_service import TransportationService
+        service = TransportationService()
+        return service._generate_recommendations(obj)
+
+class EmissionFactorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmissionFactor
+        fields = [
+            'id',
+            'transport_mode',
+            'vehicle_type',
+            'fuel_type',
+            'base_emission_factor',
+            'volume_factor',
+            'load_factor_impact',
+            'is_active',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+class TransportationEmissionSummarySerializer(serializers.Serializer):
+    total_emissions = serializers.FloatField()
+    average_efficiency = serializers.FloatField()
+    total_distance = serializers.FloatField()
+    total_volume = serializers.FloatField()
+    emissions_by_mode = serializers.DictField(child=serializers.FloatField()) 

@@ -4,13 +4,13 @@ from .models import User
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('email', 'username', 'first_name', 'last_name', 'company', 'position', 'is_staff')
-    search_fields = ('email', 'username', 'first_name', 'last_name', 'company')
+    list_display = ('email', 'username', 'first_name', 'last_name', 'position', 'is_staff')
+    search_fields = ('email', 'username', 'first_name', 'last_name')
     list_filter = ('is_staff', 'is_superuser', 'is_active', 'groups')
     
     fieldsets = (
         (None, {'fields': ('email', 'username', 'password')}),
-        ('Personal info', {'fields': ('first_name', 'last_name', 'phone_number', 'company', 'position')}),
+        ('Personal info', {'fields': ('first_name', 'last_name', 'phone_number', 'position')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
