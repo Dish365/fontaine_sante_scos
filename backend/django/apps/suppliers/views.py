@@ -3,13 +3,33 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from .models import Supplier, Material, SupplierMaterial, SupplierAssessment, Order, OrderItem
+from django.utils import timezone
+from datetime import timedelta
+from .models import (
+    Supplier,
+    Material,
+    SupplierMaterial,
+    SupplierAssessment,
+    Order,
+    OrderItem,
+    TransportationEmission,
+    EmissionFactor
+)
 from .serializers import (
-    SupplierSerializer, MaterialSerializer, SupplierMaterialSerializer,
-    SupplierAssessmentSerializer, SupplierCreateSerializer,
-    OrderSerializer, OrderCreateSerializer, OrderItemSerializer
+    SupplierSerializer,
+    MaterialSerializer,
+    SupplierMaterialSerializer,
+    SupplierAssessmentSerializer,
+    SupplierCreateSerializer,
+    OrderSerializer,
+    OrderCreateSerializer,
+    OrderItemSerializer,
+    TransportationEmissionSerializer,
+    EmissionFactorSerializer,
+    TransportationEmissionSummarySerializer
 )
 from apps.services.supplier_service import SupplierService, SupplierAnalyticsService
+from ..services.transportation_service import TransportationService
 import asyncio
 
 class SupplierViewSet(viewsets.ModelViewSet):
@@ -179,3 +199,107 @@ class OrderViewSet(viewsets.ModelViewSet):
         order_data = OrderSerializer(order).data
         metrics = await self.supplier_service.calculate_order_metrics(order_data)
         return Response(metrics)
+
+class TransportationEmissionViewSet(viewsets.ModelViewSet):
+    queryset = TransportationEmission.objects.all()
+    serializer_class = TransportationEmissionSerializer
+    service = TransportationService()
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        supplier_id = self.request.query_params.get('supplier_id')
+        if supplier_id:
+            queryset = queryset.filter(supplier_id=supplier_id)
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Calculate emissions using the service
+        result = self.service.calculate_emissions(
+            supplier_id=serializer.validated_data['supplier'].id,
+            distance=serializer.validated_data['distance'],
+            volume=serializer.validated_data['volume'],
+            transport_mode=serializer.validated_data['transport_mode'],
+            vehicle_type=serializer.validated_data['vehicle_type'],
+            fuel_type=serializer.validated_data['fuel_type'],
+            load_factor=serializer.validated_data.get('load_factor', 0.8),
+            return_trip=serializer.validated_data.get('return_trip', False)
+        )
+        
+        # Update serializer data with calculated values
+        serializer.validated_data.update({
+            'total_emissions': result['total_emissions'],
+            'emissions_per_km': result['emissions_per_km'],
+            'emissions_per_volume': result['emissions_per_volume'],
+            'transport_efficiency_score': result['efficiency_score']
+        })
+        
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        supplier_id = request.query_params.get('supplier_id')
+        days = int(request.query_params.get('days', 30))
+        
+        if not supplier_id:
+            return Response(
+                {'error': 'supplier_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        
+        emissions = self.service.get_supplier_emissions(
+            supplier_id=supplier_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # Calculate summary statistics
+        total_emissions = sum(e['total_emissions'] for e in emissions)
+        total_distance = sum(e['distance'] for e in emissions)
+        total_volume = sum(e['volume'] for e in emissions)
+        average_efficiency = sum(e['transport_efficiency_score'] for e in emissions) / len(emissions) if emissions else 0
+        
+        # Group emissions by transport mode
+        emissions_by_mode = {}
+        for emission in emissions:
+            mode = emission['transport_mode']
+            if mode not in emissions_by_mode:
+                emissions_by_mode[mode] = 0
+            emissions_by_mode[mode] += emission['total_emissions']
+        
+        summary_data = {
+            'total_emissions': total_emissions,
+            'average_efficiency': average_efficiency,
+            'total_distance': total_distance,
+            'total_volume': total_volume,
+            'emissions_by_mode': emissions_by_mode
+        }
+        
+        serializer = TransportationEmissionSummarySerializer(summary_data)
+        return Response(serializer.data)
+
+class EmissionFactorViewSet(viewsets.ModelViewSet):
+    queryset = EmissionFactor.objects.all()
+    serializer_class = EmissionFactorSerializer
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        transport_mode = self.request.query_params.get('transport_mode')
+        vehicle_type = self.request.query_params.get('vehicle_type')
+        fuel_type = self.request.query_params.get('fuel_type')
+        
+        if transport_mode:
+            queryset = queryset.filter(transport_mode=transport_mode)
+        if vehicle_type:
+            queryset = queryset.filter(vehicle_type=vehicle_type)
+        if fuel_type:
+            queryset = queryset.filter(fuel_type=fuel_type)
+            
+        return queryset.filter(is_active=True)

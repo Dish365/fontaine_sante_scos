@@ -6,7 +6,12 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-your-secret-key-here'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-your-secret-key-here')
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
 # Application definition
 INSTALLED_APPS = [
@@ -92,11 +97,11 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files
 MEDIA_URL = 'media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -106,14 +111,13 @@ AUTH_USER_MODEL = 'users.User'
 
 # REST Framework settings
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
-    ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10,
+    ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
@@ -129,8 +133,29 @@ SIMPLE_JWT = {
 
 # API Documentation settings
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Fontaine Santé API',
-    'DESCRIPTION': 'API for Fontaine Santé Supplier Management System',
+    'TITLE': 'Fontaine Santé SCOS API',
+    'DESCRIPTION': 'API for managing suppliers and transportation emissions',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+}
+
+# FastAPI Configuration
+FASTAPI_BASE_URL = os.environ.get('FASTAPI_BASE_URL', 'http://localhost:8001')
+
+# Transportation Settings
+TRANSPORTATION_SETTINGS = {
+    'DEFAULT_LOAD_FACTOR': 0.8,
+    'MAX_EMISSIONS_PER_KM': 2.0,  # kg CO2e/km
+    'MAX_EMISSIONS_PER_VOLUME': 5.0,  # kg CO2e/m3
+    'EFFICIENCY_SCORE_WEIGHTS': {
+        'emissions_per_km': 0.4,
+        'emissions_per_volume': 0.4,
+        'load_factor': 0.2,
+    },
+    'RECOMMENDATION_THRESHOLDS': {
+        'efficiency_score': 70,
+        'load_factor': 0.8,
+        'emissions_per_km': 1.5,
+        'emissions_per_volume': 3.0,
+    }
 }

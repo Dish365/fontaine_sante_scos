@@ -4,9 +4,11 @@ from ..engines.economic_engine import EconomicEngine
 from ..engines.quality_engine import QualityEngine
 from ..engines.environmental_engine import EnvironmentalEngine
 from ..engines.tradeoff_engine import TradeoffEngine
+from ..engines.transportation_engine import TransportationEngine
 from ..schemas.economic import SupplierCostInput, EconomicScoreOutput, OptimizationResult
 from ..schemas.quality import QualityInput, QualityAssessment
 from ..schemas.environmental import EnvironmentalInput, EnvironmentalAssessment
+from ..schemas.transportation import TransportationInput, TransportationAssessment
 from ..schemas.tradeoff import TradeoffInput, TradeoffAnalysis, OptimizationPreferences
 from ..exceptions import CalculationError, ValidationError, ServiceError
 
@@ -16,6 +18,7 @@ class CalculationService:
         self.quality_engine = QualityEngine()
         self.environmental_engine = EnvironmentalEngine()
         self.tradeoff_engine = TradeoffEngine()
+        self.transportation_engine = TransportationEngine()
     
     async def calculate_economic(self, data: Dict[str, Any]) -> Dict[str, Any]:
         try:
@@ -651,4 +654,20 @@ class CalculationService:
         # Calculate emissions
         emissions = distance * weight * emission_factor
         
-        return emissions 
+        return emissions
+
+    async def calculate_transportation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            result = await self.transportation_engine.calculate(data)
+            return {"success": True, "data": result}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def calculate_transportation_emissions(
+        self,
+        data: TransportationInput
+    ) -> TransportationAssessment:
+        try:
+            return await self.transportation_engine.calculate_transportation_emissions(data)
+        except Exception as e:
+            raise CalculationError(f"Error calculating transportation emissions: {str(e)}") 
