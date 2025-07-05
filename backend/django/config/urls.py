@@ -31,7 +31,7 @@ urlpatterns = [
     # API endpoints
     path('api/users/', include('apps.users.urls')),
     path('api/suppliers/', include('apps.suppliers.urls')),
-    path('api/assessments/', include('apps.assessments.urls')),
+    # Note: services is now a separate module, not a Django app
 ]
 
 if settings.DEBUG:

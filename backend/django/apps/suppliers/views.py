@@ -5,6 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from datetime import timedelta
+import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Import models and serializers
 from .models import (
     Supplier,
     Material,
@@ -28,9 +34,38 @@ from .serializers import (
     EmissionFactorSerializer,
     TransportationEmissionSummarySerializer
 )
-from apps.services.supplier_service import SupplierService, SupplierAnalyticsService
-from ..services.transportation_service import TransportationService
-import asyncio
+
+# Import services with error handling
+try:
+    from .services import SupplierService, SupplierAnalyticsService, TransportationService
+    SERVICES_AVAILABLE = True
+    logger.info("Services successfully imported in views")
+except ImportError as e:
+    logger.warning(f"Services not available: {e}")
+    SERVICES_AVAILABLE = False
+    
+    # Create mock service classes to prevent errors
+    class SupplierService:
+        def __init__(self):
+            pass
+        async def create_order(self, data):
+            return {"error": "Service not available"}
+        async def get_order_history(self, supplier_id):
+            return {"error": "Service not available"}
+        # Add other methods as stubs
+    
+    class SupplierAnalyticsService:
+        def __init__(self):
+            pass
+        async def get_environmental_impact(self, supplier_id):
+            return {"error": "Service not available"}
+        # Add other methods as stubs
+    
+    class TransportationService:
+        def __init__(self):
+            pass
+        def calculate_emissions(self, **kwargs):
+            return {"error": "Service not available"}
 
 class SupplierViewSet(viewsets.ModelViewSet):
     queryset = Supplier.objects.all()
@@ -39,8 +74,21 @@ class SupplierViewSet(viewsets.ModelViewSet):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.supplier_service = SupplierService()
-        self.analytics_service = SupplierAnalyticsService()
+        if SERVICES_AVAILABLE:
+            self.supplier_service = SupplierService()
+            self.analytics_service = SupplierAnalyticsService()
+        else:
+            self.supplier_service = None
+            self.analytics_service = None
+    
+    def _check_service_availability(self):
+        """Check if services are available and return appropriate response if not"""
+        if not SERVICES_AVAILABLE:
+            return Response(
+                {"error": "External services are currently unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        return None
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -52,6 +100,10 @@ class SupplierViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     async def create_order(self, request, pk=None):
+        service_check = self._check_service_availability()
+        if service_check:
+            return service_check
+            
         supplier = self.get_object()
         request.data['supplier'] = supplier.id
         order_data = await self.supplier_service.create_order(request.data)
@@ -59,11 +111,19 @@ class SupplierViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     async def orders(self, request, pk=None):
+        service_check = self._check_service_availability()
+        if service_check:
+            return service_check
+            
         order_history = await self.supplier_service.get_order_history(pk)
         return Response(order_history)
     
     @action(detail=True, methods=['get'])
     async def environmental_impact(self, request, pk=None):
+        service_check = self._check_service_availability()
+        if service_check:
+            return service_check
+            
         impact_data = await self.analytics_service.get_environmental_impact(pk)
         return Response(impact_data)
     
@@ -176,7 +236,19 @@ class OrderViewSet(viewsets.ModelViewSet):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.supplier_service = SupplierService()
+        if SERVICES_AVAILABLE:
+            self.supplier_service = SupplierService()
+        else:
+            self.supplier_service = None
+
+    def _check_service_availability(self):
+        """Check if services are available and return appropriate response if not"""
+        if not SERVICES_AVAILABLE:
+            return Response(
+                {"error": "Supplier service is currently unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        return None
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -195,6 +267,10 @@ class OrderViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     async def analytics(self, request, pk=None):
+        service_check = self._check_service_availability()
+        if service_check:
+            return service_check
+            
         order = self.get_object()
         order_data = OrderSerializer(order).data
         metrics = await self.supplier_service.calculate_order_metrics(order_data)
@@ -203,7 +279,22 @@ class OrderViewSet(viewsets.ModelViewSet):
 class TransportationEmissionViewSet(viewsets.ModelViewSet):
     queryset = TransportationEmission.objects.all()
     serializer_class = TransportationEmissionSerializer
-    service = TransportationService()
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if SERVICES_AVAILABLE:
+            self.service = TransportationService()
+        else:
+            self.service = None
+
+    def _check_service_availability(self):
+        """Check if services are available and return appropriate response if not"""
+        if not SERVICES_AVAILABLE:
+            return Response(
+                {"error": "Transportation service is currently unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        return None
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -213,6 +304,10 @@ class TransportationEmissionViewSet(viewsets.ModelViewSet):
         return queryset
 
     def create(self, request, *args, **kwargs):
+        service_check = self._check_service_availability()
+        if service_check:
+            return service_check
+            
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -242,6 +337,10 @@ class TransportationEmissionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
+        service_check = self._check_service_availability()
+        if service_check:
+            return service_check
+            
         supplier_id = request.query_params.get('supplier_id')
         days = int(request.query_params.get('days', 30))
         

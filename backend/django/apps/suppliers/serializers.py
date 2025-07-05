@@ -155,7 +155,7 @@ class TransportationEmissionSerializer(serializers.ModelSerializer):
         ]
 
     def get_recommendations(self, obj):
-        from ..services.transportation_service import TransportationService
+        from .services import TransportationService
         service = TransportationService()
         return service._generate_recommendations(obj)
 
