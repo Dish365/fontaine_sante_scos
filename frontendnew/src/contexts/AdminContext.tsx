@@ -72,7 +72,7 @@ export const AdminProvider: React.FC<AdminProviderProps> = ({ children }) => {
 
   const verifyOtp = async (otpCode: string): Promise<void> => {
     try {
-      await adminApi.verifyOtp(pendingUsername, otpCode);
+      await adminApi.verifyOtp(otpEmail, otpCode);
       setIsAdminAuthenticated(true);
       resetOtpState();
     } catch (error) {

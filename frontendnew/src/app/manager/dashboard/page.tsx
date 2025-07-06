@@ -147,6 +147,24 @@ export default function ManagerDashboardPage() {
                 </Button>
                 
                 <Button 
+                  onClick={() => router.push('/manager/materials')} 
+                  variant="outline" 
+                  className="h-20 flex flex-col items-center justify-center"
+                >
+                  <span className="font-medium">Material Management</span>
+                  <span className="text-sm text-gray-600">Manage raw materials</span>
+                </Button>
+                
+                <Button 
+                  onClick={() => router.push('/manager/warehouses')} 
+                  variant="outline" 
+                  className="h-20 flex flex-col items-center justify-center"
+                >
+                  <span className="font-medium">Warehouse Management</span>
+                  <span className="text-sm text-gray-600">Manage warehouses</span>
+                </Button>
+                
+                <Button 
                   onClick={() => router.push('/manager/reports')} 
                   variant="outline" 
                   className="h-20 flex flex-col items-center justify-center"

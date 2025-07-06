@@ -174,6 +174,9 @@ class OTPVerifyView(GenericAPIView):
     permission_classes = []
     
     def post(self, request):
+        print(f"[OTP_VERIFY DEBUG] Received OTP verification request")
+        print(f"[OTP_VERIFY DEBUG] Request data: {request.data}")
+        
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             try:
@@ -182,34 +185,57 @@ class OTPVerifyView(GenericAPIView):
                 otp = serializer.validated_data['otp']
                 method = serializer.validated_data['method']
                 
+                print(f"[OTP_VERIFY DEBUG] email: {email}")
+                print(f"[OTP_VERIFY DEBUG] username: {username}")
+                print(f"[OTP_VERIFY DEBUG] otp: {otp}")
+                print(f"[OTP_VERIFY DEBUG] method: {method}")
+                
                 user = None
                 if email:
+                    print(f"[OTP_VERIFY DEBUG] Searching by email: {email}")
                     user = User.objects.get(email=email)
                 elif username:
+                    print(f"[OTP_VERIFY DEBUG] Searching by username: {username}")
                     user = User.objects.get(username=username)
                 
-                if user and user.verify_otp(otp, method=method):
-                    # Generate JWT tokens
-                    refresh = RefreshToken.for_user(user)
-                    
-                    return Response({
-                        'message': 'Login successful',
-                        'refresh': str(refresh),
-                        'access': str(refresh.access_token),
-                        'user': UserSerializer(user).data
-                    })
+                print(f"[OTP_VERIFY DEBUG] Found user: {user.email if user else 'None'}")
                 
+                if user:
+                    print(f"[OTP_VERIFY DEBUG] User last_otp_generation: {user.last_otp_generation}")
+                    print(f"[OTP_VERIFY DEBUG] User email_otp_secret: {user.email_otp_secret}")
+                    otp_valid = user.verify_otp(otp, method=method)
+                    print(f"[OTP_VERIFY DEBUG] OTP verification result: {otp_valid}")
+                    
+                    if otp_valid:
+                        # Generate JWT tokens
+                        refresh = RefreshToken.for_user(user)
+                        
+                        print(f"[OTP_VERIFY DEBUG] OTP verification successful, returning tokens")
+                        return Response({
+                            'message': 'Login successful',
+                            'refresh': str(refresh),
+                            'access': str(refresh.access_token),
+                            'user': UserSerializer(user).data
+                        })
+                
+                print(f"[OTP_VERIFY DEBUG] OTP verification failed")
                 return Response(
                     {'error': 'Invalid or expired OTP'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
             except User.DoesNotExist:
+                print(f"[OTP_VERIFY DEBUG] User not found")
                 return Response(
                     {'error': 'Invalid user'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            print(f"[OTP_VERIFY DEBUG] Serializer validation failed: {serializer.errors}")
+            return Response({
+                'error': 'OTP verification failed',
+                'details': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 class OTPRequestView(GenericAPIView):
     """Request new OTP for existing authenticated session"""

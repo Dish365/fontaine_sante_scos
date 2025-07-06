@@ -140,4 +140,43 @@ export const authApi = {
       body: JSON.stringify({ refresh: refreshToken }),
     });
   },
+};
+
+// Helper function for supplier-related API calls
+export const supplierApi = {
+  // Get all suppliers
+  getSuppliers: async () => {
+    return fetchApi('/api/suppliers/suppliers/');
+  },
+
+  // Get material categories
+  getMaterialCategories: async () => {
+    return fetchApi('/api/suppliers/material-categories/');
+  },
+
+  // Get tax regions
+  getTaxRegions: async () => {
+    return fetchApi('/api/suppliers/tax-regions/');
+  },
+
+  // Get currencies
+  getCurrencies: async () => {
+    return fetchApi('/api/suppliers/currencies/');
+  },
+
+  // Calculate tax
+  calculateTax: async (data: { amount: number; tax_region_id: number; include_duties?: boolean }) => {
+    return fetchApi('/api/suppliers/calculate-tax/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Create material
+  createMaterial: async (data: any) => {
+    return fetchApi('/api/suppliers/materials/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 }; 

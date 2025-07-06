@@ -85,7 +85,7 @@ export const adminApi = {
   },
 
   // Admin login - Step 2: OTP verification
-  verifyOtp: async (username: string, otpCode: string): Promise<void> => {
+  verifyOtp: async (email: string, otpCode: string): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/users/login/verify/`, {
         method: 'POST',
@@ -93,7 +93,7 @@ export const adminApi = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: username,
+          email: email,
           otp: otpCode,
           method: 'email'
         }),

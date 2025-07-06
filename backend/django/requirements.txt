@@ -19,6 +19,7 @@ psycopg2-binary>=2.9.9
 drf-spectacular>=0.28.0
 djangorestframework-simplejwt>=5.3.1
 pyotp==2.9.0
+requests>=2.31.0
 
 # Development Requirements
 # Uncomment these for development environment
