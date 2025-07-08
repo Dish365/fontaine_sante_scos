@@ -72,7 +72,7 @@ export default function Home() {
                 Integrating environmental impact assessment, economic analysis, and quality metrics 
                 for sustainable supply chain operations and decision-making.
               </p>
-            </div>
+        </div>
 
             {/* Right Side - Portal Access */}
             <div className="space-y-6">
@@ -99,16 +99,16 @@ export default function Home() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <Button 
-                    onClick={() => router.push('/admin/login')} 
+              <Button 
+                onClick={() => router.push('/admin/login')} 
                     className="w-full h-11 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold"
-                  >
+              >
                     Admin Access
-                  </Button>
-                </CardContent>
-              </Card>
+              </Button>
+            </CardContent>
+          </Card>
 
-              {/* Manager Portal */}
+          {/* Manager Portal */}
               <Card className="hover:shadow-2xl transition-all duration-300 border-0 bg-gradient-to-br from-green-50 to-emerald-100 overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-green-400/20 to-transparent rounded-full -mr-12 -mt-12"></div>
                 <CardHeader className="relative pb-3">
@@ -123,16 +123,16 @@ export default function Home() {
                       <CardDescription className="text-green-700 text-sm">Supply chain oversight</CardDescription>
                     </div>
                   </div>
-                </CardHeader>
+            </CardHeader>
                 <CardContent className="pt-0">
-                  <Button 
-                    onClick={() => router.push('/manager/login')} 
+              <Button 
+                onClick={() => router.push('/manager/login')} 
                     className="w-full h-11 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold"
-                  >
+              >
                     Manager Access
-                  </Button>
-                </CardContent>
-              </Card>
+              </Button>
+            </CardContent>
+          </Card>
             </div>
           </div>
         </div>
@@ -144,7 +144,7 @@ export default function Home() {
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Core Capabilities</h2>
           <p className="text-lg text-gray-600">Comprehensive supply chain intelligence and analytics</p>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
           {/* Environmental Impact */}
           <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl p-6 border border-green-200">

@@ -5,12 +5,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.db.models import Q, Count, Avg, Sum
+from django.db.models import Q, Count, Avg, Sum, F, ExpressionWrapper, DecimalField
+from django.conf import settings
 from django_filters.rest_framework import DjangoFilterBackend
 from datetime import timedelta, date
 from decimal import Decimal
 import asyncio
 import logging
+from django.db.models.functions import ExtractMonth, TruncMonth
 
 logger = logging.getLogger(__name__)
 
@@ -232,19 +234,29 @@ class TaxRegionViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class WarehouseViewSet(viewsets.ModelViewSet):
-    """Warehouses API - Manage warehouse locations and capacity"""
+    """Enhanced Warehouses API - Manage warehouse locations, capacity, and supplier relationships"""
     queryset = Warehouse.objects.all()
     serializer_class = WarehouseSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['warehouse_type', 'country', 'state_province', 'is_active', 'is_primary']
-    search_fields = ['name', 'code', 'city', 'manager_name']
-    ordering_fields = ['name', 'code', 'created_at', 'current_utilization']
-    ordering = ['-is_primary', 'name']
+    filterset_fields = ['warehouse_type', 'country', 'state_province', 'is_active', 'is_primary', 
+                        'monitoring_enabled', 'monitoring_status', 'priority', 'cold_storage_available',
+                        'hazmat_certified', 'organic_certified', 'cross_dock_capable', 'operates_24_7']
+    search_fields = ['name', 'code', 'city', 'manager_name', 'description']
+    ordering_fields = ['name', 'code', 'created_at', 'current_utilization', 'priority', 'warehouse_type']
+    ordering = ['-is_primary', 'priority', 'name']
+
+    def get_queryset(self):
+        """Enhanced queryset with prefetch for performance"""
+        return super().get_queryset().prefetch_related('preferred_suppliers')
+
+    def perform_create(self, serializer):
+        """Set created_by on warehouse creation"""
+        serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=['post'])
     def geocode(self, request, pk=None):
-        """Geocode warehouse address"""
+        """Geocode warehouse address with enhanced response"""
         warehouse = self.get_object()
         
         if warehouse.geocode_address():
@@ -253,30 +265,371 @@ class WarehouseViewSet(viewsets.ModelViewSet):
             return Response({
                 'success': True,
                 'message': 'Address geocoded successfully',
-                'warehouse': serializer.data
+                'warehouse': serializer.data,
+                'coordinates': warehouse.coordinates,
+                'geocoding_source': warehouse.geocoding_source,
+                'geocoding_accuracy': warehouse.geocoding_accuracy
             })
         else:
             return Response({
                 'success': False,
-                'message': 'Failed to geocode address'
+                'message': 'Failed to geocode address. Please check the address format.',
+                'suggestions': [
+                    'Ensure street number and name are provided',
+                    'Check city and province spelling',
+                    'Verify postal code format',
+                    'Make sure country is correct'
+                ]
             }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['get'])
     def nearby_suppliers(self, request, pk=None):
-        """Get suppliers near this warehouse"""
+        """Get suppliers near this warehouse with enhanced filtering"""
         warehouse = self.get_object()
-        radius = float(request.query_params.get('radius', 100))  # Default 100km
         
-        suppliers = warehouse.get_nearby_suppliers(radius_km=radius)
-        serializer = SupplierSerializer(suppliers, many=True, context={'request': request})
+        # Get query parameters
+        radius = float(request.query_params.get('radius', 100))  # Default 100km
+        transport_mode = request.query_params.get('transport_mode')
+        material_id = request.query_params.get('material_id')
+        min_capacity = request.query_params.get('min_capacity')
+        
+        # Get suppliers based on parameters
+        if material_id:
+            suppliers = warehouse.get_compatible_suppliers(material_id=int(material_id))
+        elif transport_mode:
+            suppliers = warehouse.get_suppliers_by_distance(
+                radius_km=radius, 
+                transport_mode=transport_mode
+            )
+        else:
+            suppliers = warehouse.get_suppliers_by_distance(radius_km=radius)
+        
+        # Additional filtering
+        if min_capacity:
+            suppliers = suppliers.filter(current_capacity__gte=float(min_capacity))
+        
+        # Calculate distances and sort
+        supplier_data = []
+        for supplier in suppliers:
+            distance = warehouse.get_distance_to_supplier(supplier)
+            if distance is not None:
+                supplier_data.append({
+                    'supplier': SupplierSerializer(supplier, context={'request': request}).data,
+                    'distance_km': round(distance, 2),
+                    'transport_compatible': (
+                        not transport_mode or 
+                        transport_mode in supplier.transportation_modes or
+                        supplier.transportation_mode == transport_mode
+                    )
+                })
+        
+        # Sort by distance
+        supplier_data.sort(key=lambda x: x['distance_km'])
         
         return Response({
             'warehouse_id': warehouse.id,
             'warehouse_name': warehouse.name,
+            'warehouse_coordinates': warehouse.coordinates,
             'search_radius_km': radius,
-            'supplier_count': suppliers.count(),
-            'suppliers': serializer.data
+            'transport_mode': transport_mode,
+            'material_id': material_id,
+            'supplier_count': len(supplier_data),
+            'suppliers': supplier_data
         })
+
+    @action(detail=True, methods=['get'])
+    def optimal_suppliers(self, request, pk=None):
+        """Get optimal suppliers for a specific material with scoring"""
+        warehouse = self.get_object()
+        
+        material_id = request.query_params.get('material_id')
+        quantity = request.query_params.get('quantity')
+        
+        if not material_id:
+            return Response({
+                'error': 'material_id parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get optimal suppliers with scoring
+            supplier_scores = warehouse.get_optimal_suppliers(
+                material_id=int(material_id),
+                quantity=float(quantity) if quantity else None
+            )
+            
+            # Format response
+            optimal_suppliers = []
+            for score_data in supplier_scores:
+                supplier_data = SupplierSerializer(
+                    score_data['supplier'], 
+                    context={'request': request}
+                ).data
+                
+                optimal_suppliers.append({
+                    'supplier': supplier_data,
+                    'optimization_score': round(score_data['score'], 2),
+                    'distance_km': round(score_data['distance'], 2),
+                    'price_per_unit': score_data['price'],
+                    'lead_time_days': score_data['lead_time'],
+                    'transport_compatible': score_data['transport_compatible'],
+                    'recommendation': self._get_supplier_recommendation(score_data)
+                })
+            
+            return Response({
+                'warehouse_id': warehouse.id,
+                'warehouse_name': warehouse.name,
+                'material_id': material_id,
+                'quantity': quantity,
+                'optimal_suppliers': optimal_suppliers,
+                'total_evaluated': len(optimal_suppliers)
+            })
+            
+        except Exception as e:
+            logger.error(f"Error finding optimal suppliers: {e}")
+            return Response({
+                'error': 'Failed to calculate optimal suppliers'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _get_supplier_recommendation(self, score_data):
+        """Generate recommendation text for supplier"""
+        score = score_data['score']
+        if score >= 90:
+            return "Excellent choice - high score across all criteria"
+        elif score >= 80:
+            return "Good option - strong performance in most areas"
+        elif score >= 70:
+            return "Acceptable - consider for backup or specific needs"
+        elif score >= 60:
+            return "Below average - may require additional evaluation"
+        else:
+            return "Poor fit - consider alternative suppliers"
+
+    @action(detail=True, methods=['get'])
+    def performance_metrics(self, request, pk=None):
+        """Get performance metrics for this warehouse"""
+        warehouse = self.get_object()
+        
+        metrics = warehouse.get_performance_metrics()
+        
+        # Add additional calculated metrics
+        metrics.update({
+            'capacity_utilization': {
+                'current': float(warehouse.current_utilization or 0),
+                'status': warehouse.utilization_status,
+                'threshold': float(warehouse.max_capacity_threshold),
+                'is_over_capacity': warehouse.is_over_capacity
+            },
+            'monitoring': {
+                'enabled': warehouse.monitoring_enabled,
+                'status': warehouse.monitoring_status,
+                'last_check': warehouse.last_monitoring_check,
+                'needs_update': warehouse.needs_monitoring_update,
+                'interval_seconds': warehouse.monitoring_interval
+            },
+            'location': {
+                'coordinates': warehouse.coordinates,
+                'has_valid_coordinates': warehouse.has_valid_coordinates,
+                'geofence_radius_meters': warehouse.geofence_radius,
+                'last_gps_update': warehouse.gps_last_updated
+            }
+        })
+        
+        return Response(metrics)
+
+    @action(detail=True, methods=['post'])
+    def update_monitoring(self, request, pk=None):
+        """Update monitoring status and metrics"""
+        warehouse = self.get_object()
+        
+        # Update monitoring status
+        new_status = request.data.get('status')
+        if new_status in ['online', 'offline', 'maintenance', 'alert']:
+            warehouse.update_monitoring_status(new_status)
+        
+        # Update performance metrics if provided
+        if 'avg_delivery_time' in request.data:
+            warehouse.avg_delivery_time = request.data['avg_delivery_time']
+        
+        if 'on_time_delivery_rate' in request.data:
+            warehouse.on_time_delivery_rate = request.data['on_time_delivery_rate']
+        
+        if 'current_utilization' in request.data:
+            warehouse.current_utilization = request.data['current_utilization']
+        
+        warehouse.last_performance_update = timezone.now()
+        warehouse.save()
+        
+        return Response({
+            'success': True,
+            'message': 'Monitoring status updated successfully',
+            'warehouse': self.get_serializer(warehouse).data
+        })
+
+    @action(detail=True, methods=['post'])
+    def check_geofence(self, request, pk=None):
+        """Check if coordinates are within warehouse geofence"""
+        warehouse = self.get_object()
+        
+        lat = request.data.get('latitude')
+        lng = request.data.get('longitude')
+        
+        if not lat or not lng:
+            return Response({
+                'error': 'latitude and longitude are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            is_within = warehouse.is_within_geofence(float(lat), float(lng))
+            
+            return Response({
+                'warehouse_id': warehouse.id,
+                'warehouse_name': warehouse.name,
+                'warehouse_coordinates': warehouse.coordinates,
+                'check_coordinates': [float(lat), float(lng)],
+                'geofence_radius_meters': warehouse.geofence_radius,
+                'is_within_geofence': is_within
+            })
+            
+        except ValueError:
+            return Response({
+                'error': 'Invalid coordinates provided'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def add_preferred_supplier(self, request, pk=None):
+        """Add a preferred supplier to this warehouse"""
+        warehouse = self.get_object()
+        supplier_id = request.data.get('supplier_id')
+        
+        if not supplier_id:
+            return Response({
+                'error': 'supplier_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            supplier = Supplier.objects.get(id=supplier_id, is_active=True)
+            warehouse.preferred_suppliers.add(supplier)
+            
+            return Response({
+                'success': True,
+                'message': f'Supplier {supplier.name} added to preferred suppliers',
+                'warehouse_id': warehouse.id,
+                'supplier_id': supplier.id
+            })
+            
+        except Supplier.DoesNotExist:
+            return Response({
+                'error': 'Supplier not found or inactive'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['delete'])
+    def remove_preferred_supplier(self, request, pk=None):
+        """Remove a preferred supplier from this warehouse"""
+        warehouse = self.get_object()
+        supplier_id = request.query_params.get('supplier_id')
+        
+        if not supplier_id:
+            return Response({
+                'error': 'supplier_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            supplier = Supplier.objects.get(id=supplier_id)
+            warehouse.preferred_suppliers.remove(supplier)
+            
+            return Response({
+                'success': True,
+                'message': f'Supplier {supplier.name} removed from preferred suppliers',
+                'warehouse_id': warehouse.id,
+                'supplier_id': supplier.id
+            })
+            
+        except Supplier.DoesNotExist:
+            return Response({
+                'error': 'Supplier not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['get'])
+    def monitoring_overview(self, request):
+        """Get monitoring overview for all warehouses"""
+        warehouses = self.get_queryset().filter(monitoring_enabled=True)
+        
+        overview = {
+            'total_warehouses': warehouses.count(),
+            'status_breakdown': {},
+            'utilization_summary': {
+                'avg_utilization': 0,
+                'over_capacity_count': 0,
+                'low_utilization_count': 0
+            },
+            'performance_summary': {
+                'avg_delivery_time': 0,
+                'avg_on_time_rate': 0
+            },
+            'alerts': []
+        }
+        
+        # Calculate status breakdown
+        for status_choice in ['online', 'offline', 'maintenance', 'alert']:
+            count = warehouses.filter(monitoring_status=status_choice).count()
+            overview['status_breakdown'][status_choice] = count
+        
+        # Calculate utilization summary
+        active_warehouses = warehouses.filter(current_utilization__isnull=False)
+        if active_warehouses.exists():
+            total_utilization = sum(float(w.current_utilization) for w in active_warehouses)
+            overview['utilization_summary']['avg_utilization'] = round(
+                total_utilization / active_warehouses.count(), 2
+            )
+            overview['utilization_summary']['over_capacity_count'] = sum(
+                1 for w in active_warehouses if w.is_over_capacity
+            )
+            overview['utilization_summary']['low_utilization_count'] = sum(
+                1 for w in active_warehouses if w.current_utilization < 30
+            )
+        
+        # Calculate performance summary
+        perf_warehouses = warehouses.filter(
+            avg_delivery_time__isnull=False,
+            on_time_delivery_rate__isnull=False
+        )
+        if perf_warehouses.exists():
+            avg_delivery = sum(float(w.avg_delivery_time) for w in perf_warehouses)
+            avg_on_time = sum(float(w.on_time_delivery_rate) for w in perf_warehouses)
+            overview['performance_summary']['avg_delivery_time'] = round(
+                avg_delivery / perf_warehouses.count(), 2
+            )
+            overview['performance_summary']['avg_on_time_rate'] = round(
+                avg_on_time / perf_warehouses.count(), 2
+            )
+        
+        # Generate alerts
+        for warehouse in warehouses:
+            if warehouse.monitoring_status == 'alert':
+                overview['alerts'].append({
+                    'warehouse_id': warehouse.id,
+                    'warehouse_name': warehouse.name,
+                    'type': 'status_alert',
+                    'message': f'Warehouse {warehouse.name} has alert status'
+                })
+            
+            if warehouse.is_over_capacity:
+                overview['alerts'].append({
+                    'warehouse_id': warehouse.id,
+                    'warehouse_name': warehouse.name,
+                    'type': 'capacity_alert',
+                    'message': f'Warehouse {warehouse.name} is over capacity ({warehouse.current_utilization}%)'
+                })
+            
+            if warehouse.needs_monitoring_update:
+                overview['alerts'].append({
+                    'warehouse_id': warehouse.id,
+                    'warehouse_name': warehouse.name,
+                    'type': 'monitoring_alert',
+                    'message': f'Warehouse {warehouse.name} needs monitoring update'
+                })
+        
+        return Response(overview)
 
 class SupplierViewSet(viewsets.ModelViewSet):
     """Enhanced Suppliers API with location services and analytics"""
@@ -613,7 +966,6 @@ class TransportationEmissionViewSet(viewsets.ModelViewSet):
         return super().get_queryset().select_related('supplier')
 
     def create(self, request, *args, **kwargs):
-        """Create transportation emission with automatic calculations"""
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             # Calculate emissions using TransportationService if available
@@ -632,9 +984,9 @@ class TransportationEmissionViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.warning(f"Transportation service calculation failed: {e}")
         
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -770,11 +1122,11 @@ class GeocodeView(APIView):
             try:
                 from .openstreetmap_api import OpenStreetMapClient
                 
+                address = serializer.validated_data['address']
+                country_code = serializer.validated_data.get('country_code', 'CA')
+                
                 osm_client = OpenStreetMapClient()
-                result = osm_client.geocode_address(
-                    serializer.validated_data['address'],
-                    serializer.validated_data.get('country_code', 'CA')
-                )
+                result = osm_client.geocode_address(address, country_code)
                 
                 if result:
                     response_data = {
@@ -791,14 +1143,214 @@ class GeocodeView(APIView):
                     else:
                         return Response(response_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 else:
-                    return Response({
-                        'error': 'Address not found or geocoding failed'
-                    }, status=status.HTTP_404_NOT_FOUND)
+                    # Provide more specific error message and suggestions
+                    error_response = {
+                        'error': 'Address not found or geocoding failed',
+                        'message': f'Unable to find specific location for: {address}',
+                        'suggestions': [
+                            'Verify the street address spelling',
+                            'Check if the street number is correct',
+                            'Ensure the city name is accurate',
+                            'Try removing unit/suite numbers',
+                            'Use the most common address format',
+                            'Check if this is a new development or construction'
+                        ],
+                        'address_tried': address,
+                        'country_code': country_code
+                    }
+                    
+                    # Try to provide specific suggestions based on the address
+                    if 'unit' in address.lower() or 'suite' in address.lower():
+                        error_response['suggestions'].insert(0, 'Try removing the unit/suite number - it may not be in the mapping database')
+                    
+                    if country_code == 'CA':
+                        error_response['suggestions'].append('For Canadian addresses, ensure the postal code format is correct (e.g., K1A 0A6)')
+                    
+                    return Response(error_response, status=status.HTTP_404_NOT_FOUND)
                     
             except Exception as e:
                 logger.error(f"Geocoding error: {e}")
                 return Response({
-                    'error': 'Geocoding service temporarily unavailable'
+                    'error': 'Geocoding service temporarily unavailable',
+                    'message': 'The address verification service is currently experiencing issues. Please try again later.',
+                    'technical_details': str(e) if settings.DEBUG else None
                 }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class EconomicAnalysisViewSet(viewsets.ViewSet):
+    """Economic Analysis API endpoints"""
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def costs(self, request):
+        """Get material cost analysis"""
+        try:
+            # Calculate total material costs
+            total_cost = SupplierMaterial.objects.filter(is_active=True).aggregate(
+                total=Sum(F('base_cost_per_unit') * F('minimum_order_quantity'))
+            )['total'] or 0
+
+            # Calculate average cost per unit
+            avg_cost = SupplierMaterial.objects.filter(is_active=True).aggregate(
+                avg=Avg('base_cost_per_unit')
+            )['avg'] or 0
+
+            # Get cost trends (last 12 months)
+            end_date = timezone.now()
+            start_date = end_date - timedelta(days=365)
+            
+            cost_trends = Order.objects.filter(
+                created_at__range=(start_date, end_date)
+            ).annotate(
+                period=TruncMonth('created_at')
+            ).values('period').annotate(
+                cost=Sum(F('quantity') * F('unit_price'))
+            ).order_by('period')
+
+            # Get top expensive materials
+            top_materials = SupplierMaterial.objects.filter(
+                is_active=True
+            ).select_related('material').order_by('-base_cost_per_unit')[:10]
+
+            # Generate cost optimization recommendations
+            recommendations = self._generate_cost_recommendations()
+
+            return Response({
+                'totalMaterialCost': float(total_cost),
+                'averageCostPerUnit': float(avg_cost),
+                'costTrends': [
+                    {
+                        'period': item['period'].strftime('%Y-%m'),
+                        'cost': float(item['cost'] or 0)
+                    } for item in cost_trends
+                ],
+                'topExpensiveMaterials': [
+                    {
+                        'name': item.material.name,
+                        'cost': float(item.base_cost_per_unit),
+                        'unit': item.material.unit_of_measure
+                    } for item in top_materials
+                ],
+                'recommendations': recommendations
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=False, methods=['get'])
+    def transport(self, request):
+        """Get transportation cost analysis"""
+        try:
+            # Calculate total transport costs
+            transport_costs = Order.objects.filter(
+                status='delivered'
+            ).aggregate(
+                total=Sum('transportation_cost')
+            )
+
+            # Calculate costs by transport mode
+            mode_costs = Order.objects.filter(
+                status='delivered'
+            ).values('transportation_mode').annotate(
+                cost=Sum('transportation_cost')
+            ).order_by('-cost')
+
+            total_cost = float(transport_costs['total'] or 0)
+            
+            # Calculate emissions by transport mode
+            emissions = TransportationEmission.objects.values(
+                'transportation_mode'
+            ).annotate(
+                total_emissions=Sum('co2_emissions')
+            ).order_by('-total_emissions')
+
+            return Response({
+                'totalTransportCost': total_cost,
+                'costByMode': [
+                    {
+                        'mode': item['transportation_mode'],
+                        'cost': float(item['cost'] or 0),
+                        'percentage': (float(item['cost'] or 0) / total_cost * 100) if total_cost > 0 else 0
+                    } for item in mode_costs
+                ],
+                'emissionsData': [
+                    {
+                        'mode': item['transportation_mode'],
+                        'emissions': float(item['total_emissions'] or 0)
+                    } for item in emissions
+                ]
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=False, methods=['get'])
+    def storage(self, request):
+        """Get storage cost analysis"""
+        try:
+            warehouses = Warehouse.objects.all()
+            
+            total_storage_cost = sum(w.monthly_storage_cost for w in warehouses)
+            total_capacity = sum(w.total_capacity for w in warehouses if w.total_capacity)
+            total_utilized = sum(w.current_utilization for w in warehouses if w.current_utilization)
+            
+            utilization_rate = total_utilized / total_capacity if total_capacity > 0 else 0
+
+            return Response({
+                'totalStorageCost': float(total_storage_cost),
+                'utilizationRate': float(utilization_rate),
+                'warehouseCosts': [
+                    {
+                        'warehouse': w.name,
+                        'cost': float(w.monthly_storage_cost),
+                        'utilization': float(w.current_utilization / w.total_capacity if w.total_capacity else 0)
+                    } for w in warehouses
+                ]
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    def _generate_cost_recommendations(self):
+        """Generate cost optimization recommendations"""
+        recommendations = []
+
+        # Check for high-cost materials
+        expensive_materials = SupplierMaterial.objects.filter(
+            is_active=True,
+            base_cost_per_unit__gt=1000  # Adjust threshold as needed
+        ).count()
+        if expensive_materials > 0:
+            recommendations.append({
+                'type': 'High-Cost Materials',
+                'description': f'Found {expensive_materials} materials with high base costs. Consider negotiating bulk discounts or finding alternative suppliers.',
+                'potentialSavings': expensive_materials * 100,  # Estimated savings
+                'priority': 'high'
+            })
+
+        # Check for underutilized warehouses
+        underutilized = Warehouse.objects.filter(
+            current_utilization__lt=F('total_capacity') * 0.5
+        ).count()
+        if underutilized > 0:
+            recommendations.append({
+                'type': 'Warehouse Utilization',
+                'description': f'{underutilized} warehouses are under 50% capacity. Consider consolidating storage to reduce costs.',
+                'potentialSavings': underutilized * 1000,  # Estimated savings
+                'priority': 'medium'
+            })
+
+        # Check for transportation optimization
+        transport_modes = Order.objects.values('transportation_mode').annotate(
+            count=Count('id'),
+            avg_cost=Avg('transportation_cost')
+        ).order_by('-avg_cost')
+
+        if transport_modes:
+            highest_cost_mode = transport_modes[0]
+            recommendations.append({
+                'type': 'Transport Optimization',
+                'description': f'{highest_cost_mode["transportation_mode"]} has the highest average cost. Consider alternative modes or routes.',
+                'potentialSavings': float(highest_cost_mode['avg_cost'] * highest_cost_mode['count'] * 0.2),  # 20% potential savings
+                'priority': 'medium'
+            })
+
+        return recommendations

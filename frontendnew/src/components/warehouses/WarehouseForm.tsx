@@ -24,7 +24,9 @@ import {
   Navigation, 
   CheckCircle,
   AlertCircle,
-  Loader2
+  Loader2,
+  RefreshCw,
+  Info
 } from 'lucide-react';
 
 interface WarehouseFormData {
@@ -64,7 +66,10 @@ const WAREHOUSE_TYPES = [
   { value: 'storage', label: 'Storage Facility' },
   { value: 'cold_storage', label: 'Cold Storage' },
   { value: 'cross_dock', label: 'Cross-Dock Facility' },
-  { value: 'hub', label: 'Regional Hub' }
+  { value: 'hub', label: 'Regional Hub' },
+  { value: 'consolidation', label: 'Consolidation Center' },
+  { value: 'retail', label: 'Retail Store' },
+  { value: 'manufacturing', label: 'Manufacturing Facility' }
 ];
 
 const CANADIAN_PROVINCES = [
@@ -98,6 +103,11 @@ export default function WarehouseForm({
 }: WarehouseFormProps) {
   const [geocoding, setGeocoding] = useState(false);
   const [geocodeResult, setGeocodeResult] = useState<any>(null);
+  const [geocodeError, setGeocodeError] = useState<{
+    message: string;
+    suggestions: string[];
+    addressTried: string;
+  } | null>(null);
   const { toast } = useToast();
 
   const handleInputChange = (field: keyof WarehouseFormData, value: any) => {
@@ -105,6 +115,12 @@ export default function WarehouseForm({
       ...formData,
       [field]: value
     });
+    
+    // Clear geocoding results when address fields change
+    if (['street_number', 'street_name', 'unit_suite', 'city', 'state_province', 'postal_code', 'country'].includes(field)) {
+      setGeocodeResult(null);
+      setGeocodeError(null);
+    }
   };
 
   const handleCountryChange = (country: string) => {
@@ -114,25 +130,91 @@ export default function WarehouseForm({
       country: country,
       country_code: countryData?.code || 'CA'
     });
+    setGeocodeResult(null);
+    setGeocodeError(null);
+  };
+
+  const formatAddressForGeocoding = () => {
+    const addressParts = [];
+    
+    // Street address
+    if (formData.street_number && formData.street_name) {
+      let streetAddress = `${formData.street_number} ${formData.street_name}`;
+      if (formData.unit_suite) {
+        streetAddress += `, ${formData.unit_suite}`;
+      }
+      addressParts.push(streetAddress);
+    }
+    
+    // City
+    if (formData.city) {
+      addressParts.push(formData.city);
+    }
+    
+    // Province/State
+    if (formData.state_province) {
+      // Use full province name for better geocoding
+      const province = CANADIAN_PROVINCES.find(p => p.value === formData.state_province);
+      addressParts.push(province?.label || formData.state_province);
+    }
+    
+    // Postal code
+    if (formData.postal_code) {
+      addressParts.push(formData.postal_code);
+    }
+    
+    // Country
+    if (formData.country) {
+      addressParts.push(formData.country);
+    }
+    
+    return addressParts.join(', ');
+  };
+
+  const validateAddressFields = () => {
+    const requiredFields = {
+      'Street Name': formData.street_name,
+      'City': formData.city,
+      'Province/State': formData.state_province
+    };
+    
+    const missingFields = Object.entries(requiredFields)
+      .filter(([_, value]) => !value?.trim())
+      .map(([key]) => key);
+    
+    if (missingFields.length > 0) {
+      toast({
+        title: "Incomplete Address",
+        description: `Please fill in the following fields: ${missingFields.join(', ')}`,
+        variant: "destructive"
+      });
+      return false;
+    }
+    
+    return true;
   };
 
   const handleGeocodeAddress = async () => {
-    const address = `${formData.street_number} ${formData.street_name} ${formData.unit_suite}, ${formData.city}, ${formData.state_province}, ${formData.postal_code}, ${formData.country}`.trim();
-    
-    if (!address) {
-      toast({
-        title: "Error",
-        description: "Please fill in the address fields before geocoding",
-        variant: "destructive"
-      });
+    if (!validateAddressFields()) {
       return;
     }
 
+    const address = formatAddressForGeocoding();
+    
     setGeocoding(true);
     setGeocodeResult(null);
+    setGeocodeError(null);
 
     try {
       const token = localStorage.getItem('access_token');
+      
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('Geocoding address:', address);
+      console.log('Country code:', formData.country_code);
+
       const response = await fetch('http://localhost:8000/api/suppliers/geocode/', {
         method: 'POST',
         headers: {
@@ -145,31 +227,61 @@ export default function WarehouseForm({
         }),
       });
 
+      const responseData = await response.json();
+      console.log('Geocoding response:', responseData);
+
       if (response.ok) {
-        const result = await response.json();
-        setGeocodeResult(result);
+        setGeocodeResult(responseData);
+        setGeocodeError(null);
         toast({
           title: "Success",
-          description: "Address geocoded successfully",
+          description: "Address verified successfully",
         });
       } else {
-        const errorData = await response.json();
+        // Handle improved error response from backend
+        const errorMessage = responseData.error || responseData.message || "Failed to geocode address";
+        const suggestions = responseData.suggestions || [];
+        const addressTried = responseData.address_tried || address;
+        
+        setGeocodeError({
+          message: errorMessage,
+          suggestions: suggestions,
+          addressTried: addressTried
+        });
+        
         toast({
-          title: "Error",
-          description: errorData.error || "Failed to geocode address",
+          title: "Address Verification Failed",
+          description: responseData.message || errorMessage,
           variant: "destructive"
         });
       }
     } catch (error) {
       console.error('Error geocoding address:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Network error occurred';
+      
+      setGeocodeError({
+        message: errorMessage,
+        suggestions: [
+          "Check your internet connection",
+          "Verify the address format",
+          "Try again in a moment"
+        ],
+        addressTried: address
+      });
+      
       toast({
         title: "Error",
-        description: "Failed to geocode address",
+        description: `Failed to verify address: ${errorMessage}`,
         variant: "destructive"
       });
     } finally {
       setGeocoding(false);
     }
+  };
+
+  const clearGeocodeResults = () => {
+    setGeocodeResult(null);
+    setGeocodeError(null);
   };
 
   const validateForm = () => {
@@ -227,6 +339,19 @@ export default function WarehouseForm({
       return false;
     }
 
+    // Validate Canadian postal code format if country is Canada
+    if (formData.country_code === 'CA' && formData.postal_code) {
+      const canadianPostalRegex = /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/;
+      if (!canadianPostalRegex.test(formData.postal_code)) {
+        toast({
+          title: "Validation Error",
+          description: "Please enter a valid Canadian postal code (e.g., K1A 0A6)",
+          variant: "destructive"
+        });
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -235,6 +360,8 @@ export default function WarehouseForm({
       onSubmit();
     }
   };
+
+  const isAddressComplete = formData.street_name && formData.city && formData.state_province;
 
   return (
     <div className="space-y-6">
@@ -341,6 +468,12 @@ export default function WarehouseForm({
                 Address Verified
               </Badge>
             )}
+            {geocodeError && (
+              <Badge variant="outline" className="text-red-600">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Verification Failed
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -349,17 +482,17 @@ export default function WarehouseForm({
               <Label htmlFor="street_number">Street Number</Label>
               <Input
                 id="street_number"
-                placeholder="123"
+                placeholder="1425"
                 value={formData.street_number}
                 onChange={(e) => handleInputChange('street_number', e.target.value)}
               />
             </div>
             
             <div className="md:col-span-2">
-              <Label htmlFor="street_name">Street Name</Label>
+              <Label htmlFor="street_name">Street Name *</Label>
               <Input
                 id="street_name"
-                placeholder="Main Street"
+                placeholder="10th Avenue"
                 value={formData.street_name}
                 onChange={(e) => handleInputChange('street_name', e.target.value)}
               />
@@ -381,7 +514,7 @@ export default function WarehouseForm({
               <Label htmlFor="city">City *</Label>
               <Input
                 id="city"
-                placeholder="Montreal"
+                placeholder="Victoria"
                 value={formData.city}
                 onChange={(e) => handleInputChange('city', e.target.value)}
               />
@@ -412,7 +545,7 @@ export default function WarehouseForm({
               <Label htmlFor="postal_code">Postal Code</Label>
               <Input
                 id="postal_code"
-                placeholder="H1A 1A1"
+                placeholder="V8X 3X4"
                 value={formData.postal_code}
                 onChange={(e) => handleInputChange('postal_code', e.target.value.toUpperCase())}
               />
@@ -438,12 +571,18 @@ export default function WarehouseForm({
             </div>
           </div>
 
+          {/* Address preview */}
+          <div className="p-3 bg-gray-50 border rounded-lg">
+            <p className="text-sm font-medium text-gray-600 mb-1">Address Preview:</p>
+            <p className="text-sm text-gray-800">{formatAddressForGeocoding() || 'Please fill in address fields'}</p>
+          </div>
+
           <div className="flex space-x-2">
             <Button
               type="button"
               variant="outline"
               onClick={handleGeocodeAddress}
-              disabled={geocoding}
+              disabled={geocoding || !isAddressComplete}
             >
               {geocoding ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -452,25 +591,65 @@ export default function WarehouseForm({
               )}
               Verify Address
             </Button>
+            
+            {(geocodeResult || geocodeError) && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={clearGeocodeResults}
+                size="sm"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Clear
+              </Button>
+            )}
           </div>
 
-          {geocodeResult && (
-            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <div className="flex items-center space-x-2 text-green-800 mb-2">
-                <CheckCircle className="h-4 w-4" />
-                <span className="font-medium">Address Verified Successfully</span>
-              </div>
-              <p className="text-sm text-green-700">
-                <strong>Formatted Address:</strong> {geocodeResult.formatted_address}
-              </p>
-              <p className="text-sm text-green-700">
-                <strong>Coordinates:</strong> {geocodeResult.latitude.toFixed(6)}, {geocodeResult.longitude.toFixed(6)}
-              </p>
-              <p className="text-sm text-green-700">
-                <strong>Confidence:</strong> {Math.round(geocodeResult.confidence * 100)}%
-              </p>
+          {!isAddressComplete && (
+            <div className="flex items-center space-x-2 text-amber-600 bg-amber-50 p-3 rounded-lg">
+              <Info className="h-4 w-4" />
+              <span className="text-sm">Please complete street name, city, and province to verify address</span>
             </div>
           )}
+
+                      {geocodeResult && (
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center space-x-2 text-green-800 mb-2">
+                  <CheckCircle className="h-4 w-4" />
+                  <span className="font-medium">Address Verified Successfully</span>
+                </div>
+                <div className="space-y-1 text-sm text-green-700">
+                  <p><strong>Formatted Address:</strong> {geocodeResult.formatted_address || 'N/A'}</p>
+                  <p><strong>Coordinates:</strong> {(geocodeResult.latitude || 0).toFixed(6)}, {(geocodeResult.longitude || 0).toFixed(6)}</p>
+                  <p><strong>Confidence:</strong> {Math.round((geocodeResult.confidence || 0) * 100)}%</p>
+                </div>
+              </div>
+            )}
+
+                      {geocodeError && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center space-x-2 text-red-800 mb-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="font-medium">Address Verification Failed</span>
+                </div>
+                <p className="text-sm text-red-700 mb-3">{geocodeError.message}</p>
+                {geocodeError.suggestions.length > 0 && (
+                  <div className="text-sm text-red-700">
+                    <p className="font-medium mb-1">Suggestions:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {geocodeError.suggestions.map((suggestion: string, index: number) => (
+                        <li key={index}>{suggestion}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {geocodeError.addressTried && (
+                  <div className="mt-3 p-2 bg-red-100 rounded text-xs text-red-600">
+                    <strong>Address tried:</strong> {geocodeError.addressTried}
+                  </div>
+                )}
+              </div>
+            )}
         </CardContent>
       </Card>
 
@@ -546,7 +725,7 @@ export default function WarehouseForm({
               <Label htmlFor="manager_phone">Phone Number</Label>
               <Input
                 id="manager_phone"
-                placeholder="+1 (514) 555-0123"
+                placeholder="+1 (250) 555-0123"
                 value={formData.manager_phone}
                 onChange={(e) => handleInputChange('manager_phone', e.target.value)}
               />

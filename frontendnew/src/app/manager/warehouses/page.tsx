@@ -511,7 +511,7 @@ export default function WarehousesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {(warehouses || []).reduce((sum, w) => sum + w.nearby_suppliers, 0)}
+              {(warehouses || []).reduce((sum, w) => sum + (w.nearby_suppliers || 0), 0)}
             </div>
             <p className="text-xs text-muted-foreground">
               Total in proximity
@@ -657,7 +657,7 @@ export default function WarehousesPage() {
               {warehouse.storage_capacity && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Capacity</p>
-                  <p className="text-sm">{warehouse.storage_capacity.toLocaleString()} m³</p>
+                  <p className="text-sm">{(warehouse.storage_capacity || 0).toLocaleString()} m³</p>
                 </div>
               )}
 
@@ -668,11 +668,11 @@ export default function WarehousesPage() {
                     <div className="flex-1 bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-blue-500 h-2 rounded-full"
-                        style={{ width: `${warehouse.current_utilization}%` }}
+                        style={{ width: `${Math.max(0, Math.min(100, warehouse.current_utilization || 0))}%` }}
                       />
                     </div>
                     <Badge className={getUtilizationColor(warehouse.utilization_status)}>
-                      {warehouse.current_utilization}%
+                      {warehouse.current_utilization || 0}%
                     </Badge>
                   </div>
                 </div>
@@ -705,7 +705,7 @@ export default function WarehousesPage() {
                 <p className="text-sm font-medium text-muted-foreground">Nearby Suppliers</p>
                 <div className="flex items-center space-x-1">
                   <Package className="h-3 w-3" />
-                  <p className="text-sm">{warehouse.nearby_suppliers} suppliers within 100km</p>
+                  <p className="text-sm">{warehouse.nearby_suppliers || 0} suppliers within 100km</p>
                 </div>
               </div>
 

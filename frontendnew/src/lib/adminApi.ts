@@ -5,6 +5,7 @@ import {
   AdminUserListResponse,
   AdminGroup,
 } from '@/types/admin';
+import axios from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -39,6 +40,12 @@ async function makeAuthenticatedRequest(url: string, options: RequestInit = {}):
 
   return response;
 }
+
+const economicAnalysis = {
+  getCosts: () => axios.get('/api/analysis/economic/costs/'),
+  getTransport: () => axios.get('/api/analysis/economic/transport/'),
+  getStorage: () => axios.get('/api/analysis/economic/storage/')
+};
 
 export const adminApi = {
   // Admin login - Step 1: Initial login
@@ -298,4 +305,6 @@ export const adminApi = {
       }
     },
   },
+
+  economicAnalysis
 }; 

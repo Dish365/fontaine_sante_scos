@@ -20,7 +20,8 @@ from .views import (
     
     # Utility API views
     TaxCalculationView,
-    GeocodeView
+    GeocodeView,
+    EconomicAnalysisViewSet,
 )
 
 router = DefaultRouter()
@@ -42,6 +43,9 @@ router.register(r'warehouses', WarehouseViewSet)
 router.register(r'volume-pricing-tiers', VolumePricingTierViewSet)
 router.register(r'seasonal-pricing', SeasonalPricingViewSet)
 
+# Additional endpoints
+router.register(r'analysis/economic', EconomicAnalysisViewSet, basename='economic-analysis')
+
 app_name = 'suppliers'
 
 urlpatterns = [
@@ -51,4 +55,14 @@ urlpatterns = [
     # Utility endpoints
     path('calculate-tax/', TaxCalculationView.as_view(), name='calculate-tax'),
     path('geocode/', GeocodeView.as_view(), name='geocode'),
+    
+    # Additional warehouse-specific endpoints (handled by actions in WarehouseViewSet)
+    # These are provided for documentation purposes - they map to ViewSet actions:
+    # GET /warehouses/{id}/performance_metrics/
+    # POST /warehouses/{id}/update_monitoring/
+    # POST /warehouses/{id}/check_geofence/
+    # GET /warehouses/{id}/optimal_suppliers/
+    # POST /warehouses/{id}/add_preferred_supplier/
+    # DELETE /warehouses/{id}/remove_preferred_supplier/
+    # GET /warehouses/monitoring_overview/
 ] 

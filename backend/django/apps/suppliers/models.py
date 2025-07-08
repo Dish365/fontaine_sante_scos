@@ -4,10 +4,11 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
 import uuid
 import requests
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -420,7 +421,7 @@ class Supplier(models.Model):
             return None
 
 class Warehouse(models.Model):
-    """Warehouse model for inventory management and logistics mapping"""
+    """Enhanced Warehouse model for comprehensive inventory management and logistics mapping"""
     
     TYPE_CHOICES = [
         ('distribution', 'Distribution Center'),
@@ -429,12 +430,23 @@ class Warehouse(models.Model):
         ('cold_storage', 'Cold Storage'),
         ('cross_dock', 'Cross-Dock Facility'),
         ('hub', 'Regional Hub'),
+        ('consolidation', 'Consolidation Center'),
+        ('retail', 'Retail Store'),
+        ('manufacturing', 'Manufacturing Facility'),
     ]
     
+    PRIORITY_CHOICES = [
+        ('high', 'High Priority'),
+        ('medium', 'Medium Priority'),
+        ('low', 'Low Priority'),
+    ]
+    
+    # Basic Information
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=20, unique=True, help_text="Unique warehouse code")
     warehouse_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='distribution')
     description = models.TextField(blank=True)
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
     
     # Enhanced address fields (same as Supplier)
     street_number = models.CharField(max_length=20, blank=True, help_text="Street number")
@@ -446,27 +458,72 @@ class Warehouse(models.Model):
     country = models.CharField(max_length=100, default='Canada', help_text="Country")
     country_code = models.CharField(max_length=2, default='CA', help_text="ISO country code")
     
-    # Geolocation fields
+    # Enhanced geolocation fields for real-time monitoring
     latitude = models.DecimalField(
         max_digits=10, 
         decimal_places=8, 
         null=True, 
         blank=True,
-        help_text="Latitude coordinate for mapping"
+        help_text="Latitude coordinate for mapping and real-time monitoring"
     )
     longitude = models.DecimalField(
         max_digits=11, 
         decimal_places=8, 
         null=True, 
         blank=True,
-        help_text="Longitude coordinate for mapping"
+        help_text="Longitude coordinate for mapping and real-time monitoring"
+    )
+    altitude = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Altitude in meters for enhanced GPS tracking"
     )
     
-    # Address validation fields
+    # Address validation and geocoding metadata
     address_formatted = models.TextField(blank=True, help_text="Formatted address from geocoding")
     address_validated = models.BooleanField(default=False, help_text="Address validated via geocoding")
     geocoding_source = models.CharField(max_length=50, blank=True, help_text="Geocoding source")
     geocoded_at = models.DateTimeField(null=True, blank=True, help_text="Last geocoded date")
+    geocoding_accuracy = models.CharField(max_length=20, blank=True, help_text="Geocoding accuracy level")
+    
+    # GPS and Real-time Monitoring Fields
+    gps_last_updated = models.DateTimeField(null=True, blank=True, help_text="Last GPS coordinate update")
+    monitoring_enabled = models.BooleanField(default=True, help_text="Enable real-time monitoring")
+    monitoring_interval = models.IntegerField(default=300, help_text="Monitoring update interval in seconds")
+    geofence_radius = models.IntegerField(default=100, help_text="Geofence radius in meters for monitoring")
+    
+    # Transportation and Logistics
+    supported_transport_modes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of supported transportation modes for deliveries ['road', 'rail', 'air', 'sea']"
+    )
+    primary_transport_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('road', 'Road Transport'),
+            ('rail', 'Rail Transport'),
+            ('air', 'Air Transport'),
+            ('sea', 'Sea Transport'),
+            ('mixed', 'Mixed Transport'),
+        ],
+        default='road',
+        help_text="Primary transportation mode for this warehouse"
+    )
+    loading_dock_count = models.IntegerField(default=1, help_text="Number of loading docks")
+    max_vehicle_capacity = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Maximum vehicle capacity that can be accommodated"
+    )
+    operates_24_7 = models.BooleanField(default=False, help_text="Operates 24/7")
+    operating_hours = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Operating hours by day {'monday': {'open': '09:00', 'close': '17:00'}}"
+    )
     
     # Capacity and operational information
     storage_capacity = models.DecimalField(
@@ -484,15 +541,77 @@ class Warehouse(models.Model):
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         help_text="Current utilization percentage"
     )
+    max_capacity_threshold = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=90.0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Maximum capacity threshold for alerts"
+    )
+    
+    # Special capabilities
+    cold_storage_available = models.BooleanField(default=False, help_text="Cold storage capabilities")
+    hazmat_certified = models.BooleanField(default=False, help_text="Hazardous materials certified")
+    organic_certified = models.BooleanField(default=False, help_text="Organic handling certified")
+    cross_dock_capable = models.BooleanField(default=False, help_text="Cross-docking capabilities")
     
     # Contact information
     manager_name = models.CharField(max_length=100, blank=True)
     manager_email = models.EmailField(blank=True)
     manager_phone = models.CharField(max_length=20, blank=True)
+    emergency_contact = models.CharField(max_length=100, blank=True)
+    emergency_phone = models.CharField(max_length=20, blank=True)
+    
+    # Supplier relationship preferences
+    preferred_suppliers = models.ManyToManyField(
+        'Supplier',
+        blank=True,
+        related_name='preferred_warehouses',
+        help_text="Preferred suppliers for this warehouse"
+    )
+    max_supplier_distance = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Maximum preferred distance from suppliers (km)"
+    )
+    
+    # Performance metrics for real-time monitoring
+    avg_delivery_time = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Average delivery time in hours"
+    )
+    on_time_delivery_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="On-time delivery rate percentage"
+    )
+    last_performance_update = models.DateTimeField(null=True, blank=True)
     
     # Operational settings
     is_active = models.BooleanField(default=True)
     is_primary = models.BooleanField(default=False, help_text="Primary warehouse for region")
+    accepts_new_suppliers = models.BooleanField(default=True, help_text="Accepts new supplier registrations")
+    
+    # Real-time monitoring status
+    last_monitoring_check = models.DateTimeField(null=True, blank=True)
+    monitoring_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('online', 'Online'),
+            ('offline', 'Offline'),
+            ('maintenance', 'Maintenance'),
+            ('alert', 'Alert'),
+        ],
+        default='online'
+    )
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -505,7 +624,12 @@ class Warehouse(models.Model):
     )
     
     class Meta:
-        ordering = ['-is_primary', 'name']
+        ordering = ['-is_primary', 'priority', 'name']
+        indexes = [
+            models.Index(fields=['latitude', 'longitude']),
+            models.Index(fields=['is_active', 'monitoring_enabled']),
+            models.Index(fields=['warehouse_type', 'is_active']),
+        ]
         
     def __str__(self):
         return f"{self.name} ({self.code})"
@@ -557,6 +681,48 @@ class Warehouse(models.Model):
                 -90 <= self.latitude <= 90 and
                 -180 <= self.longitude <= 180)
     
+    @property
+    def utilization_status(self):
+        """Get utilization status description"""
+        if not self.current_utilization:
+            return 'Unknown'
+        
+        utilization = float(self.current_utilization)
+        if utilization < 50:
+            return 'Low'
+        elif utilization < 80:
+            return 'Medium'
+        elif utilization < 95:
+            return 'High'
+        else:
+            return 'Critical'
+    
+    @property
+    def is_over_capacity(self):
+        """Check if warehouse is over capacity threshold"""
+        return (self.current_utilization and 
+                self.current_utilization >= self.max_capacity_threshold)
+    
+    @property
+    def needs_monitoring_update(self):
+        """Check if monitoring update is needed"""
+        if not self.monitoring_enabled or not self.last_monitoring_check:
+            return True
+        
+        elapsed = timezone.now() - self.last_monitoring_check
+        return elapsed.total_seconds() > self.monitoring_interval
+    
+    def save(self, *args, **kwargs):
+        """Override save to handle GPS updates and monitoring"""
+        # Update GPS timestamp if coordinates changed
+        if self.pk:
+            original = Warehouse.objects.get(pk=self.pk)
+            if (original.latitude != self.latitude or 
+                original.longitude != self.longitude):
+                self.gps_last_updated = timezone.now()
+        
+        super().save(*args, **kwargs)
+    
     def geocode_address(self):
         """Geocode the warehouse address using OpenStreetMap"""
         try:
@@ -578,23 +744,24 @@ class Warehouse(models.Model):
                 
                 # Update components if empty
                 components = result['components']
-                if not self.street_number and components['street_number']:
+                if not self.street_number and components.get('street_number'):
                     self.street_number = components['street_number']
-                if not self.street_name and components['street_name']:
+                if not self.street_name and components.get('street_name'):
                     self.street_name = components['street_name']
-                if not self.city and components['city']:
+                if not self.city and components.get('city'):
                     self.city = components['city']
-                if not self.state_province and components['state_province']:
+                if not self.state_province and components.get('state_province'):
                     self.state_province = components['state_province']
-                if not self.postal_code and components['postal_code']:
+                if not self.postal_code and components.get('postal_code'):
                     self.postal_code = components['postal_code']
-                if not self.country_code and components['country_code']:
+                if not self.country_code and components.get('country_code'):
                     self.country_code = components['country_code']
                 
                 # Update metadata
                 self.address_validated = True
                 self.geocoding_source = 'OpenStreetMap'
                 self.geocoded_at = timezone.now()
+                self.geocoding_accuracy = result.get('accuracy', 'unknown')
                 
                 return True
             
@@ -620,8 +787,8 @@ class Warehouse(models.Model):
         except Exception:
             return None
     
-    def get_nearby_suppliers(self, radius_km=100):
-        """Get suppliers within specified radius"""
+    def get_suppliers_by_distance(self, radius_km=100, transport_mode=None):
+        """Get suppliers within specified radius, optionally filtered by transport mode"""
         if not self.has_valid_coordinates:
             return Supplier.objects.none()
         
@@ -636,14 +803,142 @@ class Warehouse(models.Model):
         min_lon = self.longitude - lon_delta
         max_lon = self.longitude + lon_delta
         
-        return Supplier.objects.filter(
+        queryset = Supplier.objects.filter(
             latitude__isnull=False,
             longitude__isnull=False,
             latitude__gte=min_lat,
             latitude__lte=max_lat,
             longitude__gte=min_lon,
-            longitude__lte=max_lon
+            longitude__lte=max_lon,
+            is_active=True
         )
+        
+        # Filter by transport mode if specified
+        if transport_mode:
+            queryset = queryset.filter(
+                Q(transportation_mode=transport_mode) |
+                Q(transportation_modes__contains=[transport_mode])
+            )
+        
+        return queryset
+    
+    def get_compatible_suppliers(self, material_id=None):
+        """Get suppliers compatible with this warehouse's capabilities"""
+        suppliers = self.get_suppliers_by_distance(
+            radius_km=self.max_supplier_distance or 100
+        )
+        
+        # Filter by material if specified
+        if material_id:
+            suppliers = suppliers.filter(
+                suppliermaterial__material_id=material_id,
+                suppliermaterial__is_active=True
+            )
+        
+        # Filter by special capabilities
+        if self.cold_storage_available:
+            # Could add logic to filter suppliers with cold storage materials
+            pass
+        
+        if self.organic_certified:
+            suppliers = suppliers.filter(
+                suppliermaterial__material__is_organic=True
+            )
+        
+        return suppliers.distinct()
+    
+    def get_optimal_suppliers(self, material_id, quantity=None):
+        """Get optimal suppliers for a specific material and quantity"""
+        suppliers = self.get_compatible_suppliers(material_id)
+        
+        supplier_scores = []
+        for supplier in suppliers:
+            try:
+                # Calculate distance
+                distance = self.get_distance_to_supplier(supplier)
+                if distance is None:
+                    continue
+                
+                # Get supplier material info
+                supplier_material = supplier.suppliermaterial_set.filter(
+                    material_id=material_id,
+                    is_active=True
+                ).first()
+                
+                if not supplier_material:
+                    continue
+                
+                # Calculate score based on multiple factors
+                distance_score = max(0, 100 - (distance * 2))  # Penalize distance
+                capacity_score = 100 if supplier.current_capacity >= (quantity or 1) else 50
+                price_score = 100 - min(100, float(supplier_material.base_cost_per_unit))
+                
+                # Transport mode compatibility
+                transport_score = 100
+                if self.primary_transport_mode not in supplier.transportation_modes:
+                    transport_score = 80
+                
+                # Calculate weighted score
+                total_score = (
+                    distance_score * 0.3 +
+                    capacity_score * 0.2 +
+                    price_score * 0.3 +
+                    transport_score * 0.2
+                )
+                
+                supplier_scores.append({
+                    'supplier': supplier,
+                    'distance': distance,
+                    'score': total_score,
+                    'price': float(supplier_material.base_cost_per_unit),
+                    'lead_time': supplier_material.lead_time,
+                    'transport_compatible': self.primary_transport_mode in supplier.transportation_modes
+                })
+                
+            except Exception as e:
+                logger.warning(f"Error calculating supplier score for {supplier.name}: {e}")
+                continue
+        
+        # Sort by score (descending)
+        supplier_scores.sort(key=lambda x: x['score'], reverse=True)
+        return supplier_scores
+    
+    def update_monitoring_status(self, status=None):
+        """Update monitoring status and timestamp"""
+        if status:
+            self.monitoring_status = status
+        self.last_monitoring_check = timezone.now()
+        self.save(update_fields=['monitoring_status', 'last_monitoring_check'])
+    
+    def get_performance_metrics(self):
+        """Get performance metrics for this warehouse"""
+        # This would integrate with order tracking system
+        return {
+            'avg_delivery_time': float(self.avg_delivery_time or 0),
+            'on_time_delivery_rate': float(self.on_time_delivery_rate or 0),
+            'utilization_rate': float(self.current_utilization or 0),
+            'supplier_count': self.get_suppliers_by_distance().count(),
+            'monitoring_status': self.monitoring_status,
+            'last_update': self.last_monitoring_check,
+        }
+    
+    def is_within_geofence(self, lat, lng):
+        """Check if coordinates are within warehouse geofence"""
+        if not self.has_valid_coordinates:
+            return False
+        
+        try:
+            from .openstreetmap_api import OpenStreetMapClient
+            
+            osm_client = OpenStreetMapClient()
+            distance = osm_client.get_distance_between_points(
+                float(self.latitude), float(self.longitude),
+                float(lat), float(lng)
+            )
+            
+            return distance <= (self.geofence_radius / 1000)  # Convert meters to km
+        except Exception:
+            return False
     
     def get_map_url(self, zoom=15):
         """Get URL to view warehouse location on OpenStreetMap"""
@@ -655,6 +950,22 @@ class Warehouse(models.Model):
             
             osm_client = OpenStreetMapClient()
             return osm_client.get_map_url(float(self.latitude), float(self.longitude), zoom)
+        except Exception:
+            return None
+    
+    def get_static_map_url(self, width=400, height=300, zoom=15):
+        """Get URL for static map image of warehouse location"""
+        if not self.has_valid_coordinates:
+            return None
+        
+        try:
+            from .openstreetmap_api import OpenStreetMapClient
+            
+            osm_client = OpenStreetMapClient()
+            return osm_client.get_static_map_url(
+                float(self.latitude), float(self.longitude), 
+                width, height, zoom
+            )
         except Exception:
             return None
 

@@ -195,25 +195,102 @@ class WarehouseSerializer(serializers.ModelSerializer):
     coordinates = serializers.SerializerMethodField()
     has_valid_coordinates = serializers.BooleanField(read_only=True)
     map_url = serializers.SerializerMethodField()
+    static_map_url = serializers.SerializerMethodField()
     
-    # Calculated fields
-    nearby_suppliers = serializers.SerializerMethodField()
-    utilization_status = serializers.SerializerMethodField()
+    # Transportation and logistics fields
+    supported_transport_modes_display = serializers.SerializerMethodField()
+    primary_transport_mode_display = serializers.SerializerMethodField()
+    transport_compatibility_score = serializers.SerializerMethodField()
+    
+    # Monitoring and performance fields
+    utilization_status = serializers.CharField(read_only=True)
+    is_over_capacity = serializers.BooleanField(read_only=True)
+    needs_monitoring_update = serializers.BooleanField(read_only=True)
+    performance_metrics = serializers.SerializerMethodField()
+    
+    # Supplier relationship fields
+    preferred_suppliers = serializers.PrimaryKeyRelatedField(
+        many=True, 
+        queryset=Supplier.objects.filter(is_active=True),
+        required=False
+    )
+    preferred_suppliers_detail = serializers.SerializerMethodField()
+    nearby_suppliers_count = serializers.SerializerMethodField()
+    compatible_suppliers_count = serializers.SerializerMethodField()
+    
+    # Capacity and operational fields
+    capacity_utilization_percentage = serializers.SerializerMethodField()
+    available_capacity = serializers.SerializerMethodField()
+    operational_hours_display = serializers.SerializerMethodField()
+    
+    # Special capabilities display
+    capabilities_summary = serializers.SerializerMethodField()
     
     class Meta:
         model = Warehouse
-        fields = ['id', 'name', 'code', 'warehouse_type', 'description',
+        fields = [
+            # Basic info
+            'id', 'name', 'code', 'warehouse_type', 'description', 'priority',
+            
+            # Enhanced address fields
                  'street_number', 'street_name', 'unit_suite', 'city', 'state_province',
                  'postal_code', 'country', 'country_code', 'full_address',
-                 'latitude', 'longitude', 'coordinates', 'has_valid_coordinates',
+            
+            # Geolocation and monitoring
+            'latitude', 'longitude', 'altitude', 'coordinates', 'has_valid_coordinates',
                  'address_formatted', 'address_validated', 'geocoding_source', 'geocoded_at',
+            'geocoding_accuracy', 'map_url', 'static_map_url',
+            
+            # GPS and monitoring
+            'gps_last_updated', 'monitoring_enabled', 'monitoring_interval', 
+            'geofence_radius', 'monitoring_status', 'last_monitoring_check',
+            'needs_monitoring_update', 'performance_metrics',
+            
+            # Transportation and logistics
+            'supported_transport_modes', 'supported_transport_modes_display',
+            'primary_transport_mode', 'primary_transport_mode_display',
+            'transport_compatibility_score', 'loading_dock_count', 'max_vehicle_capacity',
+            'operates_24_7', 'operating_hours', 'operational_hours_display',
+            
+            # Capacity and utilization
                  'storage_capacity', 'current_utilization', 'utilization_status',
-                 'manager_name', 'manager_email', 'manager_phone', 'map_url',
-                 'is_active', 'is_primary', 'nearby_suppliers', 'created_at', 'updated_at']
-        read_only_fields = ['full_address', 'coordinates', 'has_valid_coordinates', 
+            'max_capacity_threshold', 'is_over_capacity', 'capacity_utilization_percentage',
+            'available_capacity',
+            
+            # Special capabilities
+            'cold_storage_available', 'hazmat_certified', 'organic_certified',
+            'cross_dock_capable', 'capabilities_summary',
+            
+            # Contact information
+            'manager_name', 'manager_email', 'manager_phone',
+            'emergency_contact', 'emergency_phone',
+            
+            # Supplier relationships
+            'preferred_suppliers', 'preferred_suppliers_detail', 'max_supplier_distance',
+            'nearby_suppliers_count', 'compatible_suppliers_count',
+            
+            # Performance metrics
+            'avg_delivery_time', 'on_time_delivery_rate', 'last_performance_update',
+            
+            # Operational settings
+            'is_active', 'is_primary', 'accepts_new_suppliers',
+            
+            # Metadata
+            'created_at', 'updated_at', 'created_by'
+        ]
+        read_only_fields = [
+            'full_address', 'coordinates', 'has_valid_coordinates', 
                            'address_formatted', 'address_validated', 'geocoding_source', 
-                           'geocoded_at', 'map_url', 'utilization_status', 'nearby_suppliers',
-                 'created_at', 'updated_at']
+            'geocoded_at', 'geocoding_accuracy', 'map_url', 'static_map_url',
+            'gps_last_updated', 'utilization_status', 'is_over_capacity',
+            'needs_monitoring_update', 'performance_metrics',
+            'supported_transport_modes_display', 'primary_transport_mode_display',
+            'transport_compatibility_score', 'capacity_utilization_percentage',
+            'available_capacity', 'operational_hours_display', 'capabilities_summary',
+            'preferred_suppliers_detail', 'nearby_suppliers_count', 'compatible_suppliers_count',
+            'last_monitoring_check', 'last_performance_update',
+            'created_at', 'updated_at', 'created_by'
+        ]
     
     def get_coordinates(self, obj):
         """Get coordinates as [lat, lng] array for mapping"""
@@ -223,24 +300,259 @@ class WarehouseSerializer(serializers.ModelSerializer):
         """Get OpenStreetMap URL for this warehouse"""
         return obj.get_map_url()
     
-    def get_nearby_suppliers(self, obj):
-        """Get count of nearby suppliers within 100km"""
-        return obj.get_nearby_suppliers(radius_km=100).count()
+    def get_static_map_url(self, obj):
+        """Get static map image URL for this warehouse"""
+        return obj.get_static_map_url()
     
-    def get_utilization_status(self, obj):
-        """Get utilization status description"""
-        if not obj.current_utilization:
-            return 'Unknown'
+    def get_supported_transport_modes_display(self, obj):
+        """Get human-readable names for supported transport modes"""
+        if not obj.supported_transport_modes:
+            return [obj.get_primary_transport_mode_display()]
         
-        utilization = float(obj.current_utilization)
-        if utilization < 50:
-            return 'Low'
-        elif utilization < 80:
-            return 'Medium'
-        elif utilization < 95:
-            return 'High'
+        mode_choices = dict([
+            ('road', 'Road Transport'),
+            ('rail', 'Rail Transport'),
+            ('air', 'Air Transport'),
+            ('sea', 'Sea Transport'),
+            ('mixed', 'Mixed Transport'),
+        ])
+        
+        return [mode_choices.get(mode, mode) for mode in obj.supported_transport_modes]
+    
+    def get_primary_transport_mode_display(self, obj):
+        """Get human-readable name for primary transport mode"""
+        return obj.get_primary_transport_mode_display()
+    
+    def get_transport_compatibility_score(self, obj):
+        """Calculate transport compatibility score with suppliers"""
+        if not obj.has_valid_coordinates:
+            return 0
+        
+        try:
+            nearby_suppliers = obj.get_suppliers_by_distance(radius_km=100)
+            if not nearby_suppliers.exists():
+                return 0
+            
+            compatible_count = 0
+            for supplier in nearby_suppliers:
+                if (obj.primary_transport_mode in supplier.transportation_modes or
+                    supplier.transportation_mode == obj.primary_transport_mode):
+                    compatible_count += 1
+            
+            return round((compatible_count / nearby_suppliers.count()) * 100, 2)
+        except Exception:
+            return 0
+    
+    def get_performance_metrics(self, obj):
+        """Get comprehensive performance metrics"""
+        return obj.get_performance_metrics()
+    
+    def get_preferred_suppliers_detail(self, obj):
+        """Get detailed information about preferred suppliers"""
+        preferred = obj.preferred_suppliers.filter(is_active=True)
+        return [{
+            'id': supplier.id,
+            'name': supplier.name,
+            'distance_km': round(obj.get_distance_to_supplier(supplier), 2) if obj.get_distance_to_supplier(supplier) else None,
+            'transport_compatible': (
+                obj.primary_transport_mode in supplier.transportation_modes or
+                supplier.transportation_mode == obj.primary_transport_mode
+            ),
+            'material_count': supplier.suppliermaterial_set.filter(is_active=True).count()
+        } for supplier in preferred]
+    
+    def get_nearby_suppliers_count(self, obj):
+        """Get count of nearby suppliers within max distance"""
+        try:
+            radius = float(obj.max_supplier_distance) if obj.max_supplier_distance else 100
+            return obj.get_suppliers_by_distance(radius_km=radius).count()
+        except Exception:
+            return 0
+    
+    def get_compatible_suppliers_count(self, obj):
+        """Get count of suppliers compatible with warehouse capabilities"""
+        try:
+            return obj.get_compatible_suppliers().count()
+        except Exception:
+            return 0
+    
+    def get_capacity_utilization_percentage(self, obj):
+        """Get capacity utilization as percentage"""
+        return float(obj.current_utilization) if obj.current_utilization else 0.0
+    
+    def get_available_capacity(self, obj):
+        """Calculate available capacity"""
+        if obj.storage_capacity and obj.current_utilization:
+            used_capacity = (obj.storage_capacity * obj.current_utilization) / 100
+            return float(obj.storage_capacity - used_capacity)
+        return None
+    
+    def get_operational_hours_display(self, obj):
+        """Get formatted operational hours"""
+        if not obj.operating_hours:
+            return "Standard business hours" if not obj.operates_24_7 else "24/7 Operations"
+        
+        if obj.operates_24_7:
+            return "24/7 Operations"
+        
+        # Format operating hours if available
+        formatted_hours = {}
+        for day, hours in obj.operating_hours.items():
+            if isinstance(hours, dict) and 'open' in hours and 'close' in hours:
+                formatted_hours[day.capitalize()] = f"{hours['open']} - {hours['close']}"
         else:
-            return 'Critical'
+                formatted_hours[day.capitalize()] = str(hours)
+        
+        return formatted_hours
+    
+    def get_capabilities_summary(self, obj):
+        """Get summary of warehouse capabilities"""
+        capabilities = []
+        
+        if obj.cold_storage_available:
+            capabilities.append("Cold Storage")
+        if obj.hazmat_certified:
+            capabilities.append("Hazmat Certified")
+        if obj.organic_certified:
+            capabilities.append("Organic Certified")
+        if obj.cross_dock_capable:
+            capabilities.append("Cross-Dock Capable")
+        if obj.operates_24_7:
+            capabilities.append("24/7 Operations")
+        
+        return {
+            'count': len(capabilities),
+            'capabilities': capabilities,
+            'has_special_capabilities': len(capabilities) > 0
+        }
+    
+    def validate(self, data):
+        """Custom validation for warehouse data"""
+        # Validate coordinates if provided
+        if 'latitude' in data and 'longitude' in data:
+            lat = data.get('latitude')
+            lng = data.get('longitude')
+            
+            if lat is not None and lng is not None:
+                if not (-90 <= lat <= 90):
+                    raise serializers.ValidationError("Latitude must be between -90 and 90")
+                if not (-180 <= lng <= 180):
+                    raise serializers.ValidationError("Longitude must be between -180 and 180")
+        
+        # Validate utilization percentage
+        if 'current_utilization' in data:
+            utilization = data.get('current_utilization')
+            if utilization is not None and not (0 <= utilization <= 100):
+                raise serializers.ValidationError("Current utilization must be between 0 and 100")
+        
+        # Validate capacity threshold
+        if 'max_capacity_threshold' in data:
+            threshold = data.get('max_capacity_threshold')
+            if threshold is not None and not (0 <= threshold <= 100):
+                raise serializers.ValidationError("Max capacity threshold must be between 0 and 100")
+        
+        # Validate monitoring interval
+        if 'monitoring_interval' in data:
+            interval = data.get('monitoring_interval')
+            if interval is not None and interval < 60:
+                raise serializers.ValidationError("Monitoring interval must be at least 60 seconds")
+        
+        # Validate geofence radius
+        if 'geofence_radius' in data:
+            radius = data.get('geofence_radius')
+            if radius is not None and radius < 10:
+                raise serializers.ValidationError("Geofence radius must be at least 10 meters")
+        
+        # Validate warehouse code uniqueness
+        if 'code' in data:
+            code = data.get('code')
+            if code:
+                existing = Warehouse.objects.filter(code=code)
+                if self.instance:
+                    existing = existing.exclude(id=self.instance.id)
+                if existing.exists():
+                    raise serializers.ValidationError("Warehouse code must be unique")
+        
+        # Validate supported transport modes
+        if 'supported_transport_modes' in data:
+            modes = data.get('supported_transport_modes')
+            if modes:
+                valid_modes = ['road', 'rail', 'air', 'sea', 'mixed']
+                invalid_modes = [mode for mode in modes if mode not in valid_modes]
+                if invalid_modes:
+                    raise serializers.ValidationError(f"Invalid transport modes: {invalid_modes}")
+        
+        # Validate primary transport mode is in supported modes
+        primary_mode = data.get('primary_transport_mode')
+        supported_modes = data.get('supported_transport_modes', [])
+        
+        if primary_mode and supported_modes and primary_mode not in supported_modes:
+            # Auto-add primary mode to supported modes
+            supported_modes.append(primary_mode)
+            data['supported_transport_modes'] = supported_modes
+        
+        return data
+    
+    def create(self, validated_data):
+        """Custom create method with auto-geocoding"""
+        # Handle preferred suppliers
+        preferred_suppliers = validated_data.pop('preferred_suppliers', [])
+        
+        # Create warehouse
+        warehouse = Warehouse.objects.create(**validated_data)
+        
+        # Set preferred suppliers
+        if preferred_suppliers:
+            warehouse.preferred_suppliers.set(preferred_suppliers)
+        
+        # Auto-geocode if address is provided and no coordinates
+        if (warehouse.full_address and 
+            not warehouse.has_valid_coordinates and 
+            not validated_data.get('skip_geocoding', False)):
+            try:
+                warehouse.geocode_address()
+                warehouse.save()
+            except Exception as e:
+                # Log warning but don't fail creation
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to geocode warehouse {warehouse.name}: {e}")
+        
+        return warehouse
+    
+    def update(self, instance, validated_data):
+        """Custom update method with geocoding on address change"""
+        # Handle preferred suppliers
+        preferred_suppliers = validated_data.pop('preferred_suppliers', None)
+        
+        # Check if address changed
+        address_changed = any(
+            validated_data.get(field) != getattr(instance, field)
+            for field in ['street_number', 'street_name', 'unit_suite', 'city', 
+                         'state_province', 'postal_code', 'country']
+        )
+        
+        # Update warehouse
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        
+        # Update preferred suppliers
+        if preferred_suppliers is not None:
+            instance.preferred_suppliers.set(preferred_suppliers)
+        
+        # Auto-geocode if address changed
+        if address_changed and not validated_data.get('skip_geocoding', False):
+            try:
+                instance.geocode_address()
+                instance.save()
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to geocode warehouse {instance.name}: {e}")
+        
+        return instance
 
 class OrderItemSerializer(serializers.ModelSerializer):
     material_name = serializers.CharField(source='material.name', read_only=True)

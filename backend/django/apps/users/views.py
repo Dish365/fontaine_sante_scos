@@ -217,12 +217,12 @@ class OTPVerifyView(GenericAPIView):
                             'access': str(refresh.access_token),
                             'user': UserSerializer(user).data
                         })
-                
-                print(f"[OTP_VERIFY DEBUG] OTP verification failed")
-                return Response(
-                    {'error': 'Invalid or expired OTP'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                    
+                    print(f"[OTP_VERIFY DEBUG] OTP verification failed")
+                    return Response(
+                        {'error': 'Invalid or expired OTP'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
                 
             except User.DoesNotExist:
                 print(f"[OTP_VERIFY DEBUG] User not found")
