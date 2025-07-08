@@ -1083,7 +1083,7 @@ class ExternalTaxService(models.Model):
     ]
     
     name = models.CharField(max_length=50, choices=SERVICE_CHOICES, unique=True)
-    api_key = models.CharField(max_length=200, blank=True)
+    api_key = models.CharField(max_length=200, blank=True, null=True)
     api_url = models.URLField(blank=True)
     supported_countries = models.CharField(
         max_length=10,
@@ -1181,12 +1181,37 @@ class ExternalTaxService(models.Model):
                 duty_rate=tax_region.duty_rate
             )
             
-            # Return the detailed breakdown
-            return breakdown
+            # Ensure breakdown has proper format for frontend compatibility
+            if breakdown:
+                # Convert Decimal values to ensure compatibility
+                from decimal import Decimal
+                
+                # Standardize field names to match TaxCalculationResponseSerializer
+                standardized_breakdown = {
+                    'subtotal': breakdown.get('subtotal', amount).quantize(Decimal('0.01')),
+                    'gst_amount': breakdown.get('gst_amount', Decimal('0.00')).quantize(Decimal('0.01')),
+                    'pst_amount': breakdown.get('pst_amount', Decimal('0.00')).quantize(Decimal('0.01')),
+                    'hst_amount': breakdown.get('hst_amount', Decimal('0.00')).quantize(Decimal('0.01')),
+                    'duty_amount': breakdown.get('duty_amount', Decimal('0.00')).quantize(Decimal('0.01')),
+                    'total_tax': breakdown.get('total_tax', Decimal('0.00')).quantize(Decimal('0.01')),
+                    'total_with_tax': breakdown.get('total_with_tax', amount).quantize(Decimal('0.01')),
+                    'tax_type': breakdown.get('tax_type', 'Unknown'),
+                    'api_source': breakdown.get('api_source', 'Canadian Sales Tax API'),
+                    'last_updated': breakdown.get('last_updated', ''),
+                    'effective_date': breakdown.get('effective_date') or '',  # Convert None to empty string
+                    'province': breakdown.get('province', province_code.upper()),
+                    'tax_region': tax_region.name  # Add the missing tax_region field
+                }
+                
+                return standardized_breakdown
+            
+            # Return None if API failed - will trigger fallback
+            return None
                 
         except Exception as e:
             print(f"Canadian Tax API error: {e}")
-            return tax_region.calculate_tax_breakdown(amount)
+            # Return None to trigger fallback to static rates
+            return None
     
     def _calculate_cra_gst(self, amount, tax_region, **kwargs):
         """Calculate GST/HST using Canada Revenue Agency rates"""

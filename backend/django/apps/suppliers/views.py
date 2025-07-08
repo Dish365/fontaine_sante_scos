@@ -478,7 +478,7 @@ class SupplierMaterialViewSet(viewsets.ModelViewSet):
         seasonal_prices = supplier_material.seasonal_pricing.filter(is_active=True).order_by('-start_date')
         serializer = SeasonalPricingSerializer(seasonal_prices, many=True, context={'request': request})
         return Response(serializer.data)
-
+    
     @action(detail=True, methods=['post'])
     def add_seasonal_pricing(self, request, pk=None):
         """Add seasonal pricing"""
@@ -490,7 +490,7 @@ class SupplierMaterialViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    
     @action(detail=True, methods=['post'])
     def calculate_price(self, request, pk=None):
         """Calculate price for a specific quantity with all applicable discounts and taxes"""
@@ -621,7 +621,7 @@ class TransportationEmissionViewSet(viewsets.ModelViewSet):
                 try:
                     transport_service = TransportationService()
                     emission_data = transport_service.calculate_emissions(**serializer.validated_data)
-                    
+        
                     # Update validated data with calculations
                     serializer.validated_data.update({
                         'total_emissions': emission_data.get('total_emissions', 0),
@@ -631,10 +631,10 @@ class TransportationEmissionViewSet(viewsets.ModelViewSet):
                     })
                 except Exception as e:
                     logger.warning(f"Transportation service calculation failed: {e}")
-            
-            self.perform_create(serializer)
-            headers = self.get_success_headers(serializer.data)
-            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -689,11 +689,11 @@ class EmissionFactorViewSet(viewsets.ModelViewSet):
 
 # Utility API Views
 class TaxCalculationView(APIView):
-    """Canadian Tax Calculation API"""
+    """Canadian Tax Calculation API with live tax rate integration"""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        """Calculate Canadian taxes for given amount and region"""
+        """Calculate Canadian taxes for given amount and region using live API"""
         serializer = TaxCalculationRequestSerializer(data=request.data)
         if serializer.is_valid():
             try:
@@ -701,7 +701,15 @@ class TaxCalculationView(APIView):
                 amount = serializer.validated_data['amount']
                 include_duties = serializer.validated_data.get('include_duties', False)
                 
-                breakdown = tax_region.calculate_tax_breakdown(amount)
+                # Try to use ExternalTaxService with Canadian Tax API first
+                breakdown = self._calculate_tax_with_api(tax_region, amount, include_duties)
+                
+                # If API calculation fails, fallback to static rates
+                if not breakdown:
+                    logger.warning(f"Canadian Tax API failed, using static rates for region {tax_region.name}")
+                    breakdown = tax_region.calculate_tax_breakdown(amount)
+                    breakdown['api_source'] = 'Static Database Rates (API Fallback)'
+                
                 breakdown['tax_region'] = tax_region.name
                 
                 response_serializer = TaxCalculationResponseSerializer(data=breakdown)
@@ -712,8 +720,44 @@ class TaxCalculationView(APIView):
                     
             except TaxRegion.DoesNotExist:
                 return Response({'error': 'Tax region not found'}, status=status.HTTP_404_NOT_FOUND)
+            except Exception as e:
+                logger.error(f"Tax calculation error: {e}")
+                return Response({'error': 'Tax calculation service temporarily unavailable'}, 
+                              status=status.HTTP_503_SERVICE_UNAVAILABLE)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _calculate_tax_with_api(self, tax_region, amount, include_duties=False):
+        """Calculate tax using Canadian Tax API via ExternalTaxService"""
+        try:
+            # Get active Canadian Tax API service
+            canadian_tax_service = ExternalTaxService.objects.filter(
+                name='canadian_tax_api',
+                is_active=True,
+                supported_countries__in=['CA', 'GLOBAL']
+            ).first()
+            
+            if canadian_tax_service and tax_region.country == 'CA' and tax_region.province_state:
+                # Use Canadian Tax API
+                breakdown = canadian_tax_service.calculate_tax(
+                    amount=amount,
+                    tax_region=tax_region,
+                    include_duties=include_duties
+                )
+                
+                # Ensure the breakdown has the expected format
+                if breakdown and 'total_with_tax' in breakdown:
+                    # Add required fields for response serializer compatibility
+                    if 'duty_amount' not in breakdown:
+                        breakdown['duty_amount'] = Decimal('0.00')
+                    
+                    return breakdown
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Canadian Tax API calculation failed: {e}")
+            return None
 
 class GeocodeView(APIView):
     """Address Geocoding API using OpenStreetMap"""

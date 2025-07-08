@@ -213,7 +213,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
         read_only_fields = ['full_address', 'coordinates', 'has_valid_coordinates', 
                            'address_formatted', 'address_validated', 'geocoding_source', 
                            'geocoded_at', 'map_url', 'utilization_status', 'nearby_suppliers',
-                           'created_at', 'updated_at']
+                 'created_at', 'updated_at']
     
     def get_coordinates(self, obj):
         """Get coordinates as [lat, lng] array for mapping"""
@@ -531,7 +531,7 @@ class TransportationEmissionSummarySerializer(serializers.Serializer):
     average_efficiency = serializers.FloatField()
     total_distance = serializers.FloatField()
     total_volume = serializers.FloatField()
-    emissions_by_mode = serializers.DictField(child=serializers.FloatField())
+    emissions_by_mode = serializers.DictField(child=serializers.FloatField()) 
 
 # Tax Calculation Serializers
 class TaxCalculationRequestSerializer(serializers.Serializer):
@@ -549,6 +549,10 @@ class TaxCalculationResponseSerializer(serializers.Serializer):
     total_with_tax = serializers.DecimalField(max_digits=12, decimal_places=2)
     tax_type = serializers.CharField()
     tax_region = serializers.CharField()
+    api_source = serializers.CharField(required=False)
+    last_updated = serializers.CharField(required=False)
+    effective_date = serializers.CharField(required=False, allow_blank=True)
+    province = serializers.CharField(required=False)
 
 # Geocoding Serializers
 class GeocodeRequestSerializer(serializers.Serializer):
