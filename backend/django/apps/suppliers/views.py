@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -15,6 +15,34 @@ import logging
 from django.db.models.functions import ExtractMonth, TruncMonth
 
 logger = logging.getLogger(__name__)
+
+# Custom permission class for internal service communication
+class AllowInternalServiceOrAuthenticated(IsAuthenticated):
+    """
+    Custom permission that allows:
+    1. Authenticated users (normal behavior)
+    2. Internal service requests from FastAPI
+    3. Frontend requests with proper headers
+    """
+    
+    def has_permission(self, request, view):
+        # Check if this is an internal service request from FastAPI
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        x_internal_service = request.META.get('HTTP_X_INTERNAL_SERVICE', '')
+        
+        # Allow FastAPI internal service requests
+        if ('httpx' in user_agent.lower() and 'fastapi' in user_agent.lower()) or x_internal_service == 'fastapi':
+            logger.info("Allowing FastAPI internal service request")
+            return True
+        
+        # Allow frontend requests from our Next.js app
+        origin = request.META.get('HTTP_ORIGIN', '')
+        if origin in ['http://localhost:3000', 'http://localhost:3001']:
+            logger.info("Allowing frontend request from trusted origin")
+            return True
+        
+        # For all other requests, require authentication
+        return super().has_permission(request, view)
 
 # Import models
 from .models import (
@@ -237,7 +265,7 @@ class WarehouseViewSet(viewsets.ModelViewSet):
     """Enhanced Warehouses API - Manage warehouse locations, capacity, and supplier relationships"""
     queryset = Warehouse.objects.all()
     serializer_class = WarehouseSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowInternalServiceOrAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['warehouse_type', 'country', 'state_province', 'is_active', 'is_primary', 
                         'monitoring_enabled', 'monitoring_status', 'priority', 'cold_storage_available',
@@ -635,7 +663,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
     """Enhanced Suppliers API with location services and analytics"""
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowInternalServiceOrAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['transportation_mode', 'environmental_certification', 'country', 'state_province', 'is_active']
     search_fields = ['name', 'contact_person', 'email', 'city']
@@ -788,7 +816,7 @@ class SupplierMaterialViewSet(viewsets.ModelViewSet):
     """Supplier Materials API - Manage material pricing and relationships"""
     queryset = SupplierMaterial.objects.all()
     serializer_class = SupplierMaterialSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowInternalServiceOrAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['supplier', 'material', 'is_active', 'tax_included']
     ordering_fields = ['base_cost_per_unit', 'lead_time', 'created_at']

@@ -1,197 +1,183 @@
+import logging
 from typing import Dict, Any, List
 from ..schemas.tradeoff import TradeoffInput, TradeoffAnalysis, OptimizationPreferences
 from ..exceptions import ValidationError, CalculationError
 
+logger = logging.getLogger(__name__)
+
 class TradeoffEngine:
+    """Trade-off analysis engine for multi-criteria supplier assessment"""
+    
+    def __init__(self):
+        self.logger = logger
+    
     async def calculate(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        try:
-            # Convert dict to TradeoffInput
-            input_data = TradeoffInput(**data)
-            preferences = OptimizationPreferences(**data.get("preferences", {}))
-            return await self.analyze_tradeoffs(input_data, preferences)
-        except Exception as e:
-            raise CalculationError(f"Error in tradeoff calculation: {str(e)}")
-
-    async def analyze_tradeoffs(
-        self,
-        data: TradeoffInput,
-        preferences: OptimizationPreferences
-    ) -> TradeoffAnalysis:
-        try:
-            # Validate input data
-            if not 0 <= data.economic_score <= 100:
-                raise ValidationError("Economic score must be between 0 and 100")
-            if not 0 <= data.quality_score <= 100:
-                raise ValidationError("Quality score must be between 0 and 100")
-            if not 0 <= data.environmental_score <= 100:
-                raise ValidationError("Environmental score must be between 0 and 100")
+        """
+        Calculate trade-off analysis for supplier evaluation
+        
+        Args:
+            data: Dictionary containing trade-off parameters
             
-            # Validate preferences
-            total_weight = (
-                preferences.economic_weight +
-                preferences.quality_weight +
-                preferences.environmental_weight
-            )
-            if not 0.99 <= total_weight <= 1.01:  # Allow for small floating-point errors
-                raise ValidationError("Weights must sum to 1")
+        Returns:
+            Dictionary with calculated trade-off results
+        """
+        try:
+            # Extract parameters
+            economic_score = data.get('economic_score', 0)
+            quality_score = data.get('quality_score', 0)
+            environmental_score = data.get('environmental_score', 0)
             
-            # Calculate balanced score using weighted average
+            # Get weights (default to equal weighting)
+            economic_weight = data.get('economic_weight', 0.33)
+            quality_weight = data.get('quality_weight', 0.33)
+            environmental_weight = data.get('environmental_weight', 0.34)
+            
+            # Normalize weights to ensure they sum to 1
+            total_weight = economic_weight + quality_weight + environmental_weight
+            if total_weight > 0:
+                economic_weight /= total_weight
+                quality_weight /= total_weight
+                environmental_weight /= total_weight
+            
+            # Calculate balanced score
             balanced_score = (
-                data.economic_score * preferences.economic_weight +
-                data.quality_score * preferences.quality_weight +
-                data.environmental_score * preferences.environmental_weight
-            ) / total_weight
-            
-            # Calculate risk assessment
-            risk_assessment = self._calculate_risk_assessment(
-                data.historical_performance,
-                data.risk_factors,
-                preferences.risk_tolerance
+                economic_score * economic_weight +
+                quality_score * quality_weight +
+                environmental_score * environmental_weight
             )
             
-            # Generate tradeoff matrix
+            # Calculate trade-off matrix
             tradeoff_matrix = self._generate_tradeoff_matrix(
-                data.economic_score,
-                data.quality_score,
-                data.environmental_score,
-                preferences
+                economic_score, quality_score, environmental_score
             )
             
-            return TradeoffAnalysis(
-                overall_score=balanced_score,
-                balanced_score=balanced_score,
-                risk_assessment=risk_assessment,
-                tradeoff_matrix=tradeoff_matrix,
-                recommendations=self._generate_tradeoff_recommendations(
-                    tradeoff_matrix,
-                    preferences.optimization_goals
-                ),
-                optimization_suggestions=self._generate_optimization_suggestions(
-                    data,
-                    preferences,
-                    tradeoff_matrix
-                )
+            # Assess risk level
+            risk_assessment = self._calculate_risk_assessment(
+                economic_score, quality_score, environmental_score
             )
-        except ValidationError as e:
-            raise e
+            
+            # Generate recommendations
+            recommendations = self._generate_tradeoff_recommendations(
+                tradeoff_matrix, economic_score, quality_score, environmental_score
+            )
+            
+            return {
+                'overall_score': balanced_score,
+                'balanced_score': balanced_score,
+                'component_scores': {
+                    'economic': economic_score,
+                    'quality': quality_score,
+                    'environmental': environmental_score
+                },
+                'weights': {
+                    'economic': economic_weight,
+                    'quality': quality_weight,
+                    'environmental': environmental_weight
+                },
+                'tradeoff_matrix': tradeoff_matrix,
+                'risk_assessment': risk_assessment,
+                'recommendations': recommendations
+            }
+            
         except Exception as e:
-            raise CalculationError(f"Error analyzing tradeoffs: {str(e)}")
-
-    def _calculate_risk_assessment(
-        self,
-        historical_performance: Dict[str, float],
-        risk_factors: Dict[str, float],
-        risk_tolerance: float
-    ) -> Dict[str, Any]:
-        # Calculate overall risk score
-        risk_score = sum(risk_factors.values()) / len(risk_factors)
-        
-        # Determine risk level based on tolerance
-        risk_level = "High" if risk_score > risk_tolerance else "Low"
-        
-        return {
-            "risk_score": risk_score,
-            "risk_level": risk_level,
-            "key_risk_factors": [
-                factor for factor, score in risk_factors.items()
-                if score > risk_tolerance
-            ],
-            "historical_trend": self._analyze_historical_trend(historical_performance)
-        }
-
+            self.logger.error(f"Error in trade-off calculation: {e}")
+            raise Exception(f"Trade-off calculation failed: {str(e)}")
+    
     def _generate_tradeoff_matrix(
         self,
         economic_score: float,
         quality_score: float,
-        environmental_score: float,
-        preferences: OptimizationPreferences
+        environmental_score: float
     ) -> Dict[str, Dict[str, float]]:
+        """Generate trade-off analysis matrix"""
+        
         return {
             "economic_vs_quality": {
-                "economic_impact": economic_score * preferences.economic_weight,
-                "quality_impact": quality_score * preferences.quality_weight,
-                "tradeoff_score": abs(economic_score - quality_score)
+                "economic_impact": economic_score,
+                "quality_impact": quality_score,
+                "tradeoff_score": abs(economic_score - quality_score),
+                "balance_assessment": "balanced" if abs(economic_score - quality_score) < 10 else "imbalanced"
             },
             "economic_vs_environmental": {
-                "economic_impact": economic_score * preferences.economic_weight,
-                "environmental_impact": environmental_score * preferences.environmental_weight,
-                "tradeoff_score": abs(economic_score - environmental_score)
+                "economic_impact": economic_score,
+                "environmental_impact": environmental_score,
+                "tradeoff_score": abs(economic_score - environmental_score),
+                "balance_assessment": "balanced" if abs(economic_score - environmental_score) < 10 else "imbalanced"
             },
             "quality_vs_environmental": {
-                "quality_impact": quality_score * preferences.quality_weight,
-                "environmental_impact": environmental_score * preferences.environmental_weight,
-                "tradeoff_score": abs(quality_score - environmental_score)
+                "quality_impact": quality_score,
+                "environmental_impact": environmental_score,
+                "tradeoff_score": abs(quality_score - environmental_score),
+                "balance_assessment": "balanced" if abs(quality_score - environmental_score) < 10 else "imbalanced"
             }
         }
-
+    
+    def _calculate_risk_assessment(
+        self,
+        economic_score: float,
+        quality_score: float,
+        environmental_score: float
+    ) -> Dict[str, Any]:
+        """Calculate overall risk assessment"""
+        
+        scores = [economic_score, quality_score, environmental_score]
+        min_score = min(scores)
+        max_score = max(scores)
+        score_variance = max_score - min_score
+        
+        # Determine risk level
+        if min_score < 40:
+            risk_level = "High"
+        elif min_score < 60 or score_variance > 30:
+            risk_level = "Medium"
+        else:
+            risk_level = "Low"
+        
+        return {
+            "risk_level": risk_level,
+            "risk_score": 100 - min_score,
+            "score_variance": score_variance,
+            "weakest_dimension": "economic" if economic_score == min_score else 
+                               "quality" if quality_score == min_score else "environmental",
+            "strongest_dimension": "economic" if economic_score == max_score else 
+                                 "quality" if quality_score == max_score else "environmental"
+        }
+    
     def _generate_tradeoff_recommendations(
         self,
         tradeoff_matrix: Dict[str, Dict[str, float]],
-        optimization_goals: List[str]
+        economic_score: float,
+        quality_score: float,
+        environmental_score: float
     ) -> List[str]:
+        """Generate trade-off optimization recommendations"""
+        
         recommendations = []
         
-        for pair, scores in tradeoff_matrix.items():
-            if scores["tradeoff_score"] > 20:  # Significant tradeoff
-                if "economic" in pair and "quality" in pair:
-                    recommendations.append("Balance cost optimization with quality requirements")
-                elif "economic" in pair and "environmental" in pair:
-                    recommendations.append("Consider environmental impact in cost optimization")
-                elif "quality" in pair and "environmental" in pair:
-                    recommendations.append("Align quality standards with environmental goals")
-                    
-        return recommendations
-
-    def _generate_optimization_suggestions(
-        self,
-        data: TradeoffInput,
-        preferences: OptimizationPreferences,
-        tradeoff_matrix: Dict[str, Dict[str, float]]
-    ) -> List[Dict[str, Any]]:
-        suggestions = []
+        # Check for significant imbalances
+        for pair, analysis in tradeoff_matrix.items():
+            if analysis["tradeoff_score"] > 25:  # Significant imbalance
+                if "economic_vs_quality" in pair:
+                    if economic_score > quality_score:
+                        recommendations.append("Consider investing some cost savings into quality improvements")
+                    else:
+                        recommendations.append("Balance quality investments with cost optimization")
+                elif "economic_vs_environmental" in pair:
+                    if economic_score > environmental_score:
+                        recommendations.append("Invest in environmental sustainability initiatives")
+                    else:
+                        recommendations.append("Optimize costs while maintaining environmental standards")
+                elif "quality_vs_environmental" in pair:
+                    if quality_score > environmental_score:
+                        recommendations.append("Enhance environmental practices while maintaining quality")
+                    else:
+                        recommendations.append("Align quality standards with environmental goals")
         
-        # Analyze each dimension
-        if data.economic_score < 70:
-            suggestions.append({
-                "dimension": "economic",
-                "priority": "high" if preferences.economic_weight > 0.4 else "medium",
-                "suggestion": "Optimize cost structure and supplier relationships"
-            })
-            
-        if data.quality_score < 70:
-            suggestions.append({
-                "dimension": "quality",
-                "priority": "high" if preferences.quality_weight > 0.4 else "medium",
-                "suggestion": "Enhance quality control measures and supplier standards"
-            })
-            
-        if data.environmental_score < 70:
-            suggestions.append({
-                "dimension": "environmental",
-                "priority": "high" if preferences.environmental_weight > 0.4 else "medium",
-                "suggestion": "Implement sustainable practices and reduce environmental impact"
-            })
-            
-        return suggestions
-
-    def _analyze_historical_trend(
-        self,
-        historical_performance: Dict[str, float]
-    ) -> Dict[str, Any]:
-        if not historical_performance:
-            return {"trend": "insufficient_data"}
-            
-        values = list(historical_performance.values())
-        if len(values) < 2:
-            return {"trend": "insufficient_data"}
-            
-        # Calculate trend
-        trend = "improving" if values[-1] > values[0] else "declining"
-        volatility = sum((x - sum(values)/len(values))**2 for x in values) / len(values)
+        # Check for overall weak performance
+        if min(economic_score, quality_score, environmental_score) < 50:
+            recommendations.append("Focus on improving the weakest performance dimension")
         
-        return {
-            "trend": trend,
-            "volatility": volatility,
-            "latest_value": values[-1],
-            "average": sum(values) / len(values)
-        } 
+        if not recommendations:
+            recommendations.append("Maintain balanced performance across all dimensions")
+        
+        return recommendations 

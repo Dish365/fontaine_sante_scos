@@ -5,7 +5,7 @@ click==8.1.8
 colorama==0.4.6
 Django==5.0.2
 djangorestframework==3.14.0
-fastapi==0.115.8
+fastapi==0.109.2
 greenlet==3.1.1
 h11==0.14.0
 idna==3.10
@@ -13,7 +13,7 @@ numpy==2.2.2
 pandas==2.2.3
 psycopg2-binary==2.9.10
 PuLP==2.9.0
-pydantic==2.10.6
+pydantic==2.6.1
 pydantic-settings==2.2.1
 pydantic_core==2.27.2
 python-dateutil==2.9.0.post0
@@ -26,4 +26,6 @@ sqlparse==0.5.3
 starlette==0.45.3
 typing_extensions==4.12.2
 tzdata==2025.1
-uvicorn==0.34.0
+uvicorn==0.27.1
+httpx==0.26.0
+websockets==14.1
