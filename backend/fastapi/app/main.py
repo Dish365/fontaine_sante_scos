@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .routers import orders, suppliers
-from .engines import economic
+from .engines import economic, environmental, quality, tradeoff
 import os
 
 app = FastAPI(
@@ -28,6 +28,9 @@ app.add_middleware(
 
 # Include routers
 app.include_router(economic.router)
+app.include_router(environmental.router)
+app.include_router(quality.router)
+app.include_router(tradeoff.router)
 app.include_router(orders.router)
 app.include_router(suppliers.router)
 

@@ -18,6 +18,10 @@ from .views import (
     VolumePricingTierViewSet,
     SeasonalPricingViewSet,
     
+    # New inventory and capacity management viewsets
+    WarehouseInventoryViewSet,
+    WarehouseCapacityAlertViewSet,
+    
     # Utility API views
     TaxCalculationView,
     GeocodeView,
@@ -42,6 +46,10 @@ router.register(r'tax-regions', TaxRegionViewSet)
 router.register(r'warehouses', WarehouseViewSet)
 router.register(r'volume-pricing-tiers', VolumePricingTierViewSet)
 router.register(r'seasonal-pricing', SeasonalPricingViewSet)
+
+# Inventory and capacity management endpoints
+router.register(r'warehouse-inventory', WarehouseInventoryViewSet)
+router.register(r'capacity-alerts', WarehouseCapacityAlertViewSet)
 
 # Additional endpoints
 router.register(r'analysis/economic', EconomicAnalysisViewSet, basename='economic-analysis')

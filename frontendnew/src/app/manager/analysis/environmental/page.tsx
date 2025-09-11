@@ -11,12 +11,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Leaf, Droplet, Trash2, Wind, Factory, Package, Truck, CheckCircle, Info, RefreshCw, AlertTriangle } from "lucide-react";
+import { Loader2, Leaf, Droplet, Trash2, Wind, Factory, Package, Truck, CheckCircle, Info, RefreshCw, AlertTriangle, ArrowLeft } from "lucide-react";
+import { useRouter } from 'next/navigation';
 import { EnvironmentalMetricsGrid } from './components/EnvironmentalCharts';
-import wsService from '@/lib/websocket';
 
 // FastAPI Base URL
 const FASTAPI_BASE_URL = "http://localhost:8001";
+// Django API Base URL
+const DJANGO_API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface SupplierEnvironmentalAnalysis {
   supplier_id: number;
@@ -94,6 +96,7 @@ interface EnvironmentalSummary {
 }
 
 export default function EnvironmentalAnalysisPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [analysisData, setAnalysisData] = useState<EnvironmentalAnalysisData | null>(null);
@@ -106,6 +109,8 @@ export default function EnvironmentalAnalysisPage() {
   const [includeMaterials, setIncludeMaterials] = useState<boolean>(true);
   const [includeTransport, setIncludeTransport] = useState<boolean>(true);
   const [selectedSuppliers, setSelectedSuppliers] = useState<number[]>([]);
+  const [showCompactSelector, setShowCompactSelector] = useState<boolean>(false);
+  const [supplierSearch, setSupplierSearch] = useState<string>('');
   const [chartType, setChartType] = useState<'emissions' | 'energy' | 'water' | 'waste'>('emissions');
 
   const fetchAnalysisData = async () => {
@@ -114,39 +119,140 @@ export default function EnvironmentalAnalysisPage() {
     setDebugInfo('🚀 Starting environmental analysis...');
     
     try {
-      // First test basic connectivity
-      console.log('Testing FastAPI connection...');
-      setDebugInfo(prev => prev + '\n🔌 Testing FastAPI connection...');
-      
-      const params = new URLSearchParams({
-        order_volume: orderVolume.toString(),
-        include_materials: includeMaterials.toString(),
-        include_transport: includeTransport.toString()
-      });
-
-      const analysisUrl = `${FASTAPI_BASE_URL}/environmental/analyze-suppliers?${params}`;
-      console.log('Fetching analysis data from:', analysisUrl);
-      setDebugInfo(prev => prev + `\n📊 Fetching analysis data with order volume: ${orderVolume}`);
-      
-      const response = await fetch(analysisUrl, {
-        method: 'GET',
+      // 1) Fetch suppliers from Django (source of truth)
+      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+      const supplierResp = await fetch(`${DJANGO_API_BASE_URL}/api/suppliers/suppliers/`, {
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Analysis failed: ${response.status} ${response.statusText} - ${errorText}`);
+      if (!supplierResp.ok) {
+        const errText = await supplierResp.text();
+        throw new Error(`Failed to fetch suppliers from Django: ${supplierResp.status} ${supplierResp.statusText} - ${errText}`);
       }
-      
-      const data = await response.json();
-      console.log('Analysis data received:', data);
-      
-      setDebugInfo(prev => prev + `\n✅ Analysis complete: ${data.supplier_analyses?.length || 0} suppliers analyzed`);
-      setDebugInfo(prev => prev + `\n📈 Overall stats: Avg score ${data.overall_statistics?.average_score?.toFixed(1) || 'N/A'}`);
-      
-      setAnalysisData(data);
+      const supplierPayload = await supplierResp.json();
+      const suppliers: any[] = supplierPayload.results || supplierPayload;
+      setDebugInfo(prev => prev + `\n🏷️ Loaded ${suppliers.length} suppliers from Django`);
+
+      // 2) For each supplier, call FastAPI environmental/assess with mapped parameters
+      const basePool = selectedSuppliers.length
+        ? suppliers.filter(s => selectedSuppliers.includes(s.id))
+        : suppliers;
+
+      const assessments = await Promise.all(
+        basePool.map(async (s) => {
+          const assessmentInput = {
+            energy_consumption: Number(s.energy_consumption || 0),
+            water_usage: Number(s.water_usage || 0),
+            waste_generated: Number(s.waste_generated || 0),
+            carbon_emissions: Number(s.carbon_footprint || 0),
+            recycling_rate: Number(s.recycling_rate || 0),
+            renewable_energy_usage: Number(s.renewable_energy_usage || 0),
+            environmental_certifications: (s.environmental_certification && s.environmental_certification !== 'none')
+              ? [String(s.environmental_certification)]
+              : [],
+          };
+
+          const resp = await fetch(`${FASTAPI_BASE_URL}/environmental/assess`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(assessmentInput),
+          });
+          if (!resp.ok) {
+            const t = await resp.text();
+            throw new Error(`FastAPI assess failed for supplier ${s.name || s.id}: ${resp.status} ${resp.statusText} - ${t}`);
+          }
+          const assessed = await resp.json();
+
+          const supplierAnalysis: SupplierEnvironmentalAnalysis = {
+            supplier_id: s.id,
+            supplier_name: s.name,
+            environmental_score: assessed.environmental_score,
+            carbon_footprint: assessed.carbon_footprint,
+            sustainability_level: assessed.sustainability_level,
+            impact_breakdown: assessed.impact_breakdown || {
+              energy: { consumption: assessmentInput.energy_consumption, renewable_percentage: assessmentInput.renewable_energy_usage, impact_score: 0 },
+              water: { usage: assessmentInput.water_usage, impact_score: 0 },
+              waste: { generated: assessmentInput.waste_generated, recycling_rate: assessmentInput.recycling_rate, impact_score: 0 },
+              emissions: { direct_emissions: assessmentInput.carbon_emissions, impact_score: 0 },
+            },
+            certifications: assessed.certifications || assessmentInput.environmental_certifications,
+            recommendations: assessed.recommendations || [],
+            transport_mode: s.transportation_mode || 'road',
+            material_count: Array.isArray(s.materials_data) ? s.materials_data.length : (Number(s.material_count || 0)),
+            metrics: {
+              energy_consumption: assessmentInput.energy_consumption,
+              water_usage: assessmentInput.water_usage,
+              waste_generated: assessmentInput.waste_generated,
+              recycling_rate: assessmentInput.recycling_rate,
+              renewable_energy: assessmentInput.renewable_energy_usage,
+            },
+          };
+          return supplierAnalysis;
+        })
+      );
+
+      // 3) Build analysis and summary objects
+      const totalSuppliers = assessments.length;
+      const scores = assessments.map(a => a.environmental_score);
+      const carbonTotals = assessments.map(a => a.carbon_footprint);
+      const energyTotals = assessments.map(a => a.metrics.energy_consumption);
+      const avgScore = scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : 0;
+      const bestScore = scores.length ? Math.max(...scores) : 0;
+      const worstScore = scores.length ? Math.min(...scores) : 0;
+      const totalCarbon = carbonTotals.reduce((a,b)=>a+b,0);
+      const totalEnergy = energyTotals.reduce((a,b)=>a+b,0);
+
+      const analysis: EnvironmentalAnalysisData = {
+        success: true,
+        analysis_parameters: {
+          order_volume: orderVolume,
+          include_materials: includeMaterials,
+          include_transport: includeTransport,
+        },
+        overall_statistics: {
+          total_suppliers_analyzed: totalSuppliers,
+          average_score: avgScore,
+          best_score: bestScore,
+          worst_score: worstScore,
+          total_carbon_footprint: totalCarbon,
+          total_energy_consumption: totalEnergy,
+        },
+        supplier_analyses: assessments,
+        recommendations: {
+          top_performer: assessments.length ? assessments.reduce((best, cur) => cur.environmental_score > best.environmental_score ? cur : best, assessments[0]) : null,
+          improvement_opportunities: Array.from(new Set(assessments.flatMap(a => a.recommendations))).slice(0, 8),
+        },
+      };
+
+      // Summary derived from Django suppliers
+      const certDist: Record<string, number> = {};
+      const transportDist: Record<string, number> = {};
+      suppliers.forEach(s => {
+        const cert = s.environmental_certification || 'none';
+        certDist[cert] = (certDist[cert] || 0) + 1;
+        const mode = s.transportation_mode || 'road';
+        transportDist[mode] = (transportDist[mode] || 0) + 1;
+      });
+      const summary: EnvironmentalSummary = {
+        success: true,
+        summary: {
+          total_suppliers: suppliers.length,
+          certification_distribution: certDist,
+          environmental_statistics: {
+            average_carbon_footprint: totalSuppliers ? totalCarbon / totalSuppliers : 0,
+            average_renewable_energy: assessments.length ? (assessments.reduce((a,b)=>a + (b.metrics.renewable_energy || 0), 0) / assessments.length) : 0,
+            total_certified_suppliers: suppliers.filter(s => s.environmental_certification && s.environmental_certification !== 'none').length,
+          },
+          transportation_distribution: transportDist,
+        },
+      };
+
+      setAnalysisData(analysis);
+      setSummaryData(summary);
+      setDebugInfo(prev => prev + `\n✅ Analysis complete: ${assessments.length} suppliers analyzed`);
+      setDebugInfo(prev => prev + `\n📈 Overall stats: Avg score ${avgScore.toFixed(1)}`);
     } catch (error) {
       console.error('Error fetching analysis data:', error);
       const errorMsg = error instanceof Error ? error.message : 'Failed to fetch analysis data';
@@ -157,61 +263,22 @@ export default function EnvironmentalAnalysisPage() {
     }
   };
 
+  // Summary now derived in fetchAnalysisData (from Django suppliers)
   const fetchSummaryData = async () => {
     setSummaryLoading(true);
     try {
-      console.log('Fetching summary data from:', `${FASTAPI_BASE_URL}/environmental/analysis-summary`);
-      setDebugInfo(prev => prev + '\n📋 Fetching summary data...');
-      
-      const response = await fetch(`${FASTAPI_BASE_URL}/environmental/analysis-summary`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Summary failed: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Summary data received:', data);
-      setDebugInfo(prev => prev + `\n✅ Summary loaded: ${data.summary?.total_suppliers || 0} suppliers`);
-      setSummaryData(data);
-    } catch (error) {
-      console.error('Error fetching summary data:', error);
-      setDebugInfo(prev => prev + `\n❌ Summary error: ${error}`);
+      await fetchAnalysisData();
     } finally {
       setSummaryLoading(false);
     }
   };
 
       useEffect(() => {
-      // Initial data fetch
+      // Initial data fetch (single orchestrated call builds both)
       fetchSummaryData();
-      fetchAnalysisData();
 
-      // Connect to WebSocket
-      wsService.connect();
-
-      // Subscribe to environmental updates
-      const handleEnvironmentalUpdate = (data: any) => {
-        setSummaryData(data);
-        setDebugInfo(prev => prev + '\n📡 Received real-time update');
-      };
-
-      wsService.subscribe('environmental_update', handleEnvironmentalUpdate);
-
-      // Start receiving updates
-      wsService.send('subscribe_updates', {});
-
-      const cleanup = () => {
-        wsService.unsubscribe('environmental_update', handleEnvironmentalUpdate);
-        wsService.disconnect();
-      };
-
-      return cleanup;
+      // No WebSockets; no cleanup required
+      return () => {};
   }, []);
 
   const formatNumber = (value: number, decimals: number = 2) => {
@@ -252,7 +319,16 @@ export default function EnvironmentalAnalysisPage() {
   return (
     <div className="container mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Environmental Impact Analysis</h1>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/manager/dashboard')}
+            className="mr-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-3xl font-bold">Environmental Impact Analysis</h1>
+        </div>
         <div className="flex gap-2">
           <Button onClick={fetchAnalysisData} disabled={loading} variant="outline">
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
@@ -503,6 +579,13 @@ export default function EnvironmentalAnalysisPage() {
                   </div>
                   <div className="flex gap-2">
                     <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowCompactSelector((v) => !v)}
+                    >
+                      {showCompactSelector ? 'Hide' : 'Select Suppliers'}
+                    </Button>
+                    <Button 
                       onClick={fetchAnalysisData} 
                       disabled={loading}
                       size="sm"
@@ -523,6 +606,65 @@ export default function EnvironmentalAnalysisPage() {
                     </Select>
                   </div>
                 </div>
+
+                {showCompactSelector && analysisData && (
+                  <div className="mb-4 p-3 border rounded-md bg-muted/30">
+                    <div className="flex items-end gap-2 mb-2">
+                      <div className="flex-1 space-y-1">
+                        <Label htmlFor="supplierSearch" className="text-xs">Search suppliers</Label>
+                        <Input 
+                          id="supplierSearch"
+                          placeholder="Search by name"
+                          value={supplierSearch}
+                          onChange={(e) => setSupplierSearch(e.target.value)}
+                        />
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          const visible = analysisData.supplier_analyses
+                            .filter(s => s.supplier_name.toLowerCase().includes(supplierSearch.toLowerCase()))
+                            .map(s => s.supplier_id);
+                          setSelectedSuppliers((prev) => Array.from(new Set([...prev, ...visible])));
+                        }}
+                      >Select visible</Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          const visibleSet = new Set(
+                            analysisData.supplier_analyses
+                              .filter(s => s.supplier_name.toLowerCase().includes(supplierSearch.toLowerCase()))
+                              .map(s => s.supplier_id)
+                          );
+                          setSelectedSuppliers(prev => prev.filter(id => !visibleSet.has(id)));
+                        }}
+                      >Clear visible</Button>
+                      <Button size="sm" onClick={() => setShowCompactSelector(false)}>Done</Button>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto rounded border bg-background">
+                      {analysisData.supplier_analyses
+                        .filter(s => s.supplier_name.toLowerCase().includes(supplierSearch.toLowerCase()))
+                        .map((s) => (
+                          <label key={s.supplier_id} className="flex items-center gap-2 px-3 py-2 border-b last:border-b-0 text-sm cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={selectedSuppliers.includes(s.supplier_id)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSelectedSuppliers((prev) => checked 
+                                  ? [...prev, s.supplier_id]
+                                  : prev.filter(id => id !== s.supplier_id)
+                                );
+                              }}
+                            />
+                            <span className="flex-1 truncate">{s.supplier_name}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Supplier Comparison Chart */}
                 {analysisData && analysisData.supplier_analyses.length > 0 && (

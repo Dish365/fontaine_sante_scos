@@ -58,6 +58,8 @@ from .models import (
     Currency,
     TaxRegion,
     Warehouse,
+    WarehouseInventory,
+    WarehouseCapacityAlert,
     VolumePricingTier,
     SeasonalPricing,
     ExternalTaxService
@@ -81,6 +83,8 @@ from .serializers import (
     CurrencySerializer,
     TaxRegionSerializer,
     WarehouseSerializer,
+    WarehouseInventorySerializer,
+    WarehouseCapacityAlertSerializer,
     VolumePricingTierSerializer,
     SeasonalPricingSerializer,
     TaxCalculationRequestSerializer,
@@ -658,6 +662,67 @@ class WarehouseViewSet(viewsets.ModelViewSet):
                 })
         
         return Response(overview)
+    
+    @action(detail=True, methods=['get'])
+    def capacity_status(self, request, pk=None):
+        """Get detailed capacity status for a warehouse"""
+        warehouse = self.get_object()
+        capacity_status = warehouse.get_capacity_status()
+        
+        # Add inventory breakdown
+        inventory_items = warehouse.inventory_items.select_related('material').all()
+        inventory_data = WarehouseInventorySerializer(inventory_items, many=True).data
+        
+        # Add active alerts
+        active_alerts = warehouse.capacity_alerts.filter(status='active')
+        alerts_data = WarehouseCapacityAlertSerializer(active_alerts, many=True).data
+        
+        return Response({
+            'warehouse_id': warehouse.id,
+            'warehouse_name': warehouse.name,
+            'capacity_status': capacity_status,
+            'inventory_items': inventory_data,
+            'active_alerts': alerts_data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def update_capacity(self, request, pk=None):
+        """Update warehouse capacity utilization"""
+        warehouse = self.get_object()
+        utilization = warehouse.update_capacity_utilization()
+        
+        return Response({
+            'warehouse_id': warehouse.id,
+            'warehouse_name': warehouse.name,
+            'current_utilization': utilization,
+            'capacity_status': warehouse.get_capacity_status()
+        })
+    
+    @action(detail=True, methods=['get'])
+    def incoming_orders(self, request, pk=None):
+        """Get incoming orders for this warehouse"""
+        warehouse = self.get_object()
+        incoming_orders = warehouse.incoming_orders.filter(
+            status__in=['pending', 'confirmed', 'in_progress', 'shipped']
+        ).select_related('supplier').prefetch_related('items')
+        
+        orders_data = OrderSerializer(incoming_orders, many=True).data
+        
+        # Calculate total incoming volume
+        total_incoming_volume = sum(
+            float(order.total_volume_m3 or 0) for order in incoming_orders
+        )
+        
+        return Response({
+            'warehouse_id': warehouse.id,
+            'warehouse_name': warehouse.name,
+            'incoming_orders': orders_data,
+            'total_incoming_volume_m3': total_incoming_volume,
+            'will_exceed_capacity': (
+                warehouse.get_available_capacity_m3() < total_incoming_volume
+                if warehouse.storage_capacity else False
+            )
+        })
 
 class SupplierViewSet(viewsets.ModelViewSet):
     """Enhanced Suppliers API with location services and analytics"""
@@ -978,7 +1043,122 @@ class OrderViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
     
     def get_queryset(self):
-        return super().get_queryset().select_related('supplier', 'created_by').prefetch_related('items')
+        return super().get_queryset().select_related(
+            'supplier', 'destination_warehouse', 'created_by'
+        ).prefetch_related('items', 'items__material')
+    
+    @action(detail=True, methods=['post'])
+    def mark_delivered(self, request, pk=None):
+        """Mark order as delivered and update warehouse inventory"""
+        order = self.get_object()
+        
+        if order.status == 'delivered':
+            return Response({'message': 'Order already marked as delivered'})
+        
+        # Update order status
+        order.status = 'delivered'
+        order.actual_delivery_date = timezone.now().date()
+        order.save()
+        
+        # Process delivery and update inventory
+        from .services import OrderService
+        order_service = OrderService()
+        success = order_service.process_order_delivery(order.order_id)
+        
+        if success:
+            return Response({'message': 'Order marked as delivered and inventory updated'})
+        else:
+            return Response(
+                {'error': 'Order marked as delivered but inventory update failed'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class WarehouseInventoryViewSet(viewsets.ModelViewSet):
+    """Warehouse Inventory API"""
+    queryset = WarehouseInventory.objects.all()
+    serializer_class = WarehouseInventorySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['warehouse', 'material', 'stock_status']
+    ordering_fields = ['current_quantity', 'available_quantity', 'last_restocked_date']
+    ordering = ['-updated_at']
+    
+    def get_queryset(self):
+        return super().get_queryset().select_related('warehouse', 'material', 'last_restocked_order')
+    
+    @action(detail=False, methods=['get'])
+    def low_stock(self, request):
+        """Get all low stock items"""
+        from django.db import models as db_models
+        low_stock_items = self.get_queryset().filter(
+            current_quantity__lte=db_models.F('minimum_stock_level'),
+            minimum_stock_level__isnull=False
+        )
+        serializer = self.get_serializer(low_stock_items, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_warehouse(self, request):
+        """Get inventory grouped by warehouse"""
+        warehouse_id = request.query_params.get('warehouse_id')
+        if not warehouse_id:
+            return Response({'error': 'warehouse_id parameter required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        inventory = self.get_queryset().filter(warehouse_id=warehouse_id)
+        serializer = self.get_serializer(inventory, many=True)
+        return Response(serializer.data)
+
+class WarehouseCapacityAlertViewSet(viewsets.ModelViewSet):
+    """Warehouse Capacity Alerts API"""
+    queryset = WarehouseCapacityAlert.objects.all()
+    serializer_class = WarehouseCapacityAlertSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['warehouse', 'alert_type', 'status']
+    ordering_fields = ['created_at', 'current_utilization']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        return super().get_queryset().select_related('warehouse', 'material', 'acknowledged_by')
+    
+    @action(detail=True, methods=['post'])
+    def acknowledge(self, request, pk=None):
+        """Acknowledge an alert"""
+        alert = self.get_object()
+        
+        from .services import WarehouseCapacityService
+        capacity_service = WarehouseCapacityService()
+        success = capacity_service.acknowledge_alert(alert.id, request.user)
+        
+        if success:
+            alert.refresh_from_db()
+            serializer = self.get_serializer(alert)
+            return Response(serializer.data)
+        else:
+            return Response(
+                {'error': 'Failed to acknowledge alert'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Get all active alerts"""
+        active_alerts = self.get_queryset().filter(status='active')
+        serializer = self.get_serializer(active_alerts, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_warehouse(self, request):
+        """Get alerts for a specific warehouse"""
+        warehouse_id = request.query_params.get('warehouse_id')
+        if not warehouse_id:
+            return Response({'error': 'warehouse_id parameter required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        alerts = self.get_queryset().filter(warehouse_id=warehouse_id)
+        serializer = self.get_serializer(alerts, many=True)
+        return Response(serializer.data)
 
 class TransportationEmissionViewSet(viewsets.ModelViewSet):
     """Transportation Emissions API"""

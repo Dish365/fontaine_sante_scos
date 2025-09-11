@@ -72,7 +72,8 @@ export const SupplierComparisonChart = ({ data, type }: ChartProps) => {
 };
 
 export const CertificationDistributionChart = ({ data }: { data: any }) => {
-  const certData = Object.entries(data.summary.certification_distribution).map(([name, value]) => ({
+  const distribution = (data && data.summary && data.summary.certification_distribution) || {};
+  const certData = Object.entries(distribution).map(([name, value]) => ({
     name,
     value
   }));
@@ -134,7 +135,8 @@ export const EnvironmentalTrendsChart = ({ data }: { data: any }) => {
 };
 
 export const TransportationDistributionChart = ({ data }: { data: any }) => {
-  const transportData = Object.entries(data.summary.transportation_distribution).map(([mode, count]) => ({
+  const distribution = (data && data.summary && data.summary.transportation_distribution) || {};
+  const transportData = Object.entries(distribution).map(([mode, count]) => ({
     name: mode.charAt(0).toUpperCase() + mode.slice(1),
     value: count
   }));

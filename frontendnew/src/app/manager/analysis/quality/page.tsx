@@ -9,8 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export default function QualityAnalysisPage() {
+  const router = useRouter();
   const [qualityData, setQualityData] = useState({
     material_id: '',
     defect_rate: '',
@@ -63,12 +66,36 @@ export default function QualityAnalysisPage() {
   const handleCalculate = async () => {
     setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Prepare data for API call
+      const payload = {
+        defect_rate: parseFloat(qualityData.defect_rate) || 0,
+        customer_satisfaction: parseFloat(qualityData.customer_satisfaction) || 0,
+        compliance_score: parseFloat(qualityData.compliance_score) || 0,
+        process_efficiency: parseFloat(qualityData.process_efficiency) || 0,
+        quality_certifications: qualityData.certification_status,
+        measurements: qualityData.measurements,
+        standards: qualityData.standards
+      };
+
+      // Call FastAPI backend
+      const response = await fetch('http://localhost:8001/quality/assess', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Calculate compliance for measurements
       const measurements = qualityData.measurements;
       const standards = qualityData.standards;
-      
-      // Calculate compliance for each metric
       const compliance = {};
       Object.keys(measurements).forEach(metric => {
         const value = parseFloat(measurements[metric as keyof typeof measurements]);
@@ -76,48 +103,17 @@ export default function QualityAnalysisPage() {
         compliance[metric as keyof typeof compliance] = value >= standard;
       });
       
-      // Calculate overall quality score
-      const qualityScore = Object.values(compliance).filter(Boolean).length / Object.values(compliance).length * 100;
-      
-      // Calculate risk level
-      const defectRate = parseFloat(qualityData.defect_rate);
-      const customerSatisfaction = parseFloat(qualityData.customer_satisfaction);
-      const complianceScore = parseFloat(qualityData.compliance_score);
-      const processEfficiency = parseFloat(qualityData.process_efficiency);
-      
-      const riskScore = (
-        (100 - defectRate) * 0.3 +
-        customerSatisfaction * 0.3 +
-        complianceScore * 0.2 +
-        processEfficiency * 0.2
-      );
-      
-      const riskLevel = riskScore >= 80 ? 'Low' : riskScore >= 60 ? 'Medium' : 'High';
-      
-      // Identify improvement areas
-      const improvementAreas = [];
-      if (defectRate > 5) improvementAreas.push('Defect rate reduction');
-      if (customerSatisfaction < 80) improvementAreas.push('Customer satisfaction improvement');
-      if (complianceScore < 90) improvementAreas.push('Compliance enhancement');
-      if (processEfficiency < 85) improvementAreas.push('Process efficiency optimization');
-      
-      const certificationStatus = {
-        ISO9001: qualityData.certification_status.includes('ISO9001'),
-        ISO14001: qualityData.certification_status.includes('ISO14001'),
-        ISO45001: qualityData.certification_status.includes('ISO45001')
-      };
-      
+      // Merge backend results with compliance calculations
       setAnalysisResults({
-        quality_score: qualityScore,
+        ...result,
         compliance_details: compliance,
-        risk_level: riskLevel,
-        risk_score: riskScore,
-        improvement_areas: improvementAreas,
-        certification_status: certificationStatus,
-        overall_score: qualityScore,
-        recommendations: qualityScore < 70 ? 
-          ['Implement quality control measures', 'Review supplier standards', 'Increase inspection frequency'] :
-          ['Maintain current quality standards', 'Continue monitoring', 'Consider advanced quality certifications'],
+        certification_status: {
+          ISO9001: qualityData.certification_status.includes('ISO9001'),
+          ISO14001: qualityData.certification_status.includes('ISO14001'),
+          ISO45001: qualityData.certification_status.includes('ISO45001')
+        },
+        overall_score: result.quality_score,
+        risk_score: result.quality_score, // Use quality_score as risk_score for display
         audit_summary: {
           status: 'Recent audits completed',
           total_audits: 3,
@@ -126,8 +122,32 @@ export default function QualityAnalysisPage() {
           major_findings: ['Documentation incomplete', 'Process deviation observed']
         }
       });
+    } catch (error) {
+      console.error('Error calling quality assessment API:', error);
+      // Fallback to mock data if API fails
+      const qualityScore = 75;
+      setAnalysisResults({
+        quality_score: qualityScore,
+        risk_level: 'Medium',
+        quality_metrics: {},
+        certifications: qualityData.certification_status,
+        recommendations: ['Check API connection', 'Verify backend is running on port 8001'],
+        improvement_areas: ['API connectivity'],
+        compliance_details: {},
+        certification_status: {},
+        overall_score: qualityScore,
+        risk_score: qualityScore,
+        audit_summary: {
+          status: 'API Error - using fallback data',
+          total_audits: 0,
+          last_audit_date: 'N/A',
+          average_score: 0,
+          major_findings: ['API connection failed']
+        }
+      });
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const qualityMetrics = [
@@ -218,16 +238,16 @@ export default function QualityAnalysisPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center space-x-3 mb-4">
-          <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-            <span className="text-white text-xl">✅</span>
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Quality Analysis</h1>
-            <p className="text-gray-600">Quality metrics and supplier performance evaluation</p>
-          </div>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/manager/dashboard')}
+            className="mr-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-3xl font-bold">Quality Analysis</h1>
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, AuthContextType, LoginResponse } from '@/types/auth';
-import { authApi } from '@/lib/api';
+import { authApi, refreshApiClient } from '@/lib/api';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -48,7 +48,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (staffId: string, password: string): Promise<LoginResponse> => {
     try {
-      const response = await authApi.login({ staff_id: staffId, password });
+      const response = await authApi.login(staffId, password);
       if (response.email) {
         setUserEmail(response.email);
       }
@@ -65,6 +65,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Store tokens
       localStorage.setItem('access_token', response.access);
       localStorage.setItem('refresh_token', response.refresh);
+      
+      // Refresh API client to use new tokens
+      refreshApiClient();
       
       // Set user data
       setUser(response.user);

@@ -125,6 +125,8 @@ export default function EconomicAnalysisPage() {
   const [warehouseId, setWarehouseId] = useState<number | null>(null);
   const [selectedSuppliers, setSelectedSuppliers] = useState<number[]>([]);
   const [chartType, setChartType] = useState<'cost' | 'score' | 'breakdown'>('score');
+  const [showCompactSelector, setShowCompactSelector] = useState<boolean>(false);
+  const [supplierSearch, setSupplierSearch] = useState<string>('');
 
   const fetchWarehouses = async () => {
     setWarehousesLoading(true);
@@ -386,6 +388,13 @@ export default function EconomicAnalysisPage() {
     };
   };
 
+  const getBarWidthPx = (count: number): number => {
+    if (count >= 12) return 10;
+    if (count >= 9) return 12;
+    if (count >= 6) return 16;
+    return 24;
+  };
+
   if (loading && summaryLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -451,55 +460,82 @@ export default function EconomicAnalysisPage() {
         </Alert>
       )}
 
-      {/* Data Status Cards */}
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Analysis Status</p>
-                <p className="font-medium">
-                  {loading ? 'Loading...' : analysisData ? `${analysisData.supplier_analyses.length} suppliers analyzed` : 'No data'}
-                </p>
+      {/* Always-visible Analysis Parameters */}
+      <div className="mb-6 sticky top-2 z-10">
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Analysis Parameters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 items-end">
+              <div className="space-y-2">
+                <Label htmlFor="orderVolumeTop">Order Volume (units)</Label>
+                <Input
+                  id="orderVolumeTop"
+                  type="number"
+                  value={orderVolume}
+                  onChange={(e) => setOrderVolume(Number(e.target.value))}
+                  min="1"
+                />
               </div>
-              <Factory className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="border-l-4 border-l-green-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Materials & Costs</p>
-                <p className="font-medium">
-                  {summaryData ? `${summaryData.summary.total_materials} materials` : 'Loading...'}
-                </p>
+              <div className="space-y-2">
+                <Label htmlFor="warehouseTop">Warehouse</Label>
+                <Select 
+                  value={warehouseId?.toString() || 'default'}
+                  onValueChange={(value) => setWarehouseId(value === 'default' ? null : Number(value))}
+                >
+                  <SelectTrigger id="warehouseTop">
+                    <SelectValue placeholder="Select warehouse (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default Warehouse</SelectItem>
+                    {warehouses.map((w) => (
+                      <SelectItem key={w.id} value={w.id.toString()}>
+                        {w.name} - {w.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {warehousesLoading && (
+                  <p className="text-xs text-muted-foreground">Loading warehouses...</p>
+                )}
               </div>
-              <Package className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-purple-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Selected Suppliers</p>
-                <p className="font-medium">{selectedSuppliers.length} selected</p>
+              <div className="space-y-1">
+                <Label className="text-sm">Selected Suppliers</Label>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{selectedSuppliers.length} selected</Badge>
+                  {selectedSuppliers.length > 0 && (
+                    <Button size="sm" variant="outline" onClick={() => setSelectedSuppliers([])}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Choose suppliers in the Supplier Analysis tab</p>
               </div>
-              <Users className="h-8 w-8 text-purple-500" />
+              <div className="flex gap-2 justify-end">
+                <Button 
+                  onClick={runCustomAnalysis}
+                  disabled={selectedSuppliers.length === 0 || loading}
+                  variant="outline"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Analyze Selected
+                </Button>
+                <Button onClick={fetchAnalysisData} disabled={loading}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Run Analysis
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="suppliers">Supplier Analysis</TabsTrigger>
           <TabsTrigger value="costs">Cost Breakdown</TabsTrigger>
-          <TabsTrigger value="parameters">Analysis Parameters</TabsTrigger>
           <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
         </TabsList>
 
@@ -681,7 +717,7 @@ export default function EconomicAnalysisPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col lg:flex-row gap-4 mb-6">
+                <div className="flex flex-col lg:flex-row gap-4 mb-4">
                   <div className="flex-1">
                     <Label className="text-sm font-medium">
                       Selected Suppliers: {selectedSuppliers.length} 
@@ -698,6 +734,13 @@ export default function EconomicAnalysisPage() {
                     </Label>
                   </div>
                   <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowCompactSelector((v) => !v)}
+                    >
+                      {showCompactSelector ? 'Hide' : 'Select Suppliers'}
+                    </Button>
                     <Button 
                       onClick={runCustomAnalysis} 
                       disabled={selectedSuppliers.length === 0 || loading}
@@ -719,50 +762,123 @@ export default function EconomicAnalysisPage() {
                   </div>
                 </div>
 
+                {showCompactSelector && analysisData && (
+                  <div className="mb-4 p-3 border rounded-md bg-muted/30">
+                    <div className="flex items-end gap-2 mb-2">
+                      <div className="flex-1 space-y-1">
+                        <Label htmlFor="supplierSearch" className="text-xs">Search suppliers</Label>
+                        <Input 
+                          id="supplierSearch"
+                          placeholder="Search by name or city"
+                          value={supplierSearch}
+                          onChange={(e) => setSupplierSearch(e.target.value)}
+                        />
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          // Select all currently visible
+                          const pool = analysisData.supplier_analyses.filter(s => 
+                            s.supplier_name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
+                            s.supplier_info.city.toLowerCase().includes(supplierSearch.toLowerCase())
+                          ).map(s => s.supplier_id);
+                          setSelectedSuppliers((prev) => Array.from(new Set([...prev, ...pool])));
+                        }}
+                      >Select visible</Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          // Clear only currently visible
+                          const visible = new Set(
+                            analysisData.supplier_analyses.filter(s => 
+                              s.supplier_name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
+                              s.supplier_info.city.toLowerCase().includes(supplierSearch.toLowerCase())
+                            ).map(s => s.supplier_id)
+                          );
+                          setSelectedSuppliers((prev) => prev.filter(id => !visible.has(id)));
+                        }}
+                      >Clear visible</Button>
+                      <Button size="sm" onClick={() => setShowCompactSelector(false)}>Done</Button>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto rounded border bg-background">
+                      {analysisData.supplier_analyses
+                        .filter(s => 
+                          s.supplier_name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
+                          s.supplier_info.city.toLowerCase().includes(supplierSearch.toLowerCase())
+                        )
+                        .map((s) => (
+                          <label key={s.supplier_id} className="flex items-center gap-2 px-3 py-2 border-b last:border-b-0 text-sm cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={selectedSuppliers.includes(s.supplier_id)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSelectedSuppliers((prev) => checked 
+                                  ? [...prev, s.supplier_id]
+                                  : prev.filter(id => id !== s.supplier_id)
+                                );
+                              }}
+                            />
+                            <span className="flex-1 truncate">{s.supplier_name}</span>
+                            <span className="text-xs text-muted-foreground truncate">{s.supplier_info.city}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Supplier Comparison Chart */}
                 {analysisData && analysisData.supplier_analyses.length > 0 && (
-                  <div className="mb-6">
+                  <div className="mb-4">
                     <h4 className="font-medium mb-4">Supplier Performance Comparison</h4>
-                    <div className="h-64 bg-muted rounded-lg flex items-center justify-center">
-                      {chartType === 'score' && (
-                        <div className="w-full h-full flex items-end justify-around p-4">
-                          {getFilteredSuppliers().slice(0, 6).map((supplier, index) => (
-                            <div key={supplier.supplier_id} className="flex flex-col items-center">
-                              <div 
-                                className="bg-blue-500 w-8 rounded-t"
-                                style={{ height: `${(supplier.economic_analysis.score / 100) * 200}px` }}
-                              />
-                              <span className="text-xs mt-2 text-center max-w-16 truncate">
-                                {supplier.supplier_name}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {supplier.economic_analysis.score.toFixed(1)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {chartType === 'cost' && (
-                        <div className="w-full h-full flex items-end justify-around p-4">
-                          {getFilteredSuppliers().slice(0, 6).map((supplier, index) => {
-                            const maxCost = Math.max(...getFilteredSuppliers().map(s => s.economic_analysis.total_cost));
-                            return (
+                    <div className="h-56 bg-muted rounded-lg flex items-center justify-center">
+                      {chartType === 'score' && (() => {
+                        const filtered = getFilteredSuppliers();
+                        const barWidth = getBarWidthPx(filtered.length);
+                        return (
+                          <div className="w-full h-full flex items-end justify-start gap-3 p-2 overflow-x-auto">
+                            {filtered.map((supplier) => (
                               <div key={supplier.supplier_id} className="flex flex-col items-center">
                                 <div 
-                                  className="bg-green-500 w-8 rounded-t"
-                                  style={{ height: `${(supplier.economic_analysis.total_cost / maxCost) * 200}px` }}
+                                  className="bg-blue-500 rounded-t"
+                                  style={{ height: `${(supplier.economic_analysis.score / 100) * 200}px`, width: `${barWidth}px` }}
                                 />
-                                <span className="text-xs mt-2 text-center max-w-16 truncate">
+                                <span className="text-xs mt-2 text-center max-w-20 truncate">
+                                  {supplier.supplier_name}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {supplier.economic_analysis.score.toFixed(1)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      {chartType === 'cost' && (() => {
+                        const filtered = getFilteredSuppliers();
+                        const barWidth = getBarWidthPx(filtered.length);
+                        const maxCost = Math.max(...filtered.map(s => s.economic_analysis.total_cost));
+                        return (
+                          <div className="w-full h-full flex items-end justify-start gap-3 p-2 overflow-x-auto">
+                            {filtered.map((supplier) => (
+                              <div key={supplier.supplier_id} className="flex flex-col items-center">
+                                <div 
+                                  className="bg-green-500 rounded-t"
+                                  style={{ height: `${(supplier.economic_analysis.total_cost / maxCost) * 200}px`, width: `${barWidth}px` }}
+                                />
+                                <span className="text-xs mt-2 text-center max-w-20 truncate">
                                   {supplier.supplier_name}
                                 </span>
                                 <span className="text-xs text-muted-foreground">
                                   {formatCurrency(supplier.economic_analysis.total_cost)}
                                 </span>
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                            ))}
+                          </div>
+                        );
+                      })()}
                       {chartType === 'breakdown' && (
                         <div className="p-4 text-center">
                           <p className="text-sm text-muted-foreground">
@@ -1217,82 +1333,7 @@ export default function EconomicAnalysisPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="parameters">
-          <Card>
-            <CardHeader>
-              <CardTitle>Analysis Parameters</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="orderVolume">Order Volume (units)</Label>
-                  <Input
-                    id="orderVolume"
-                    type="number"
-                    value={orderVolume}
-                    onChange={(e) => setOrderVolume(Number(e.target.value))}
-                    min="1"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Volume affects material pricing and economies of scale
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="warehouseSelect">Warehouse Selection</Label>
-                  <Select 
-                    value={warehouseId?.toString() || "default"} 
-                    onValueChange={(value) => setWarehouseId(value === "default" ? null : Number(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select warehouse (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Default Warehouse</SelectItem>
-                      {warehouses.map((warehouse) => (
-                        <SelectItem key={warehouse.id} value={warehouse.id.toString()}>
-                          {warehouse.name} - {warehouse.city}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Used for transportation cost calculations
-                  </p>
-                  {warehousesLoading && (
-                    <p className="text-xs text-muted-foreground">Loading warehouses...</p>
-                  )}
-                </div>
-              </div>
-              <Button onClick={fetchAnalysisData} disabled={loading} className="w-full">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Rerun Analysis with New Parameters
-              </Button>
-              
-              {analysisData && (
-                <div className="mt-4 p-4 bg-muted rounded-lg">
-                  <h4 className="font-medium mb-2">Current Analysis Parameters:</h4>
-                  <div className="grid md:grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <span className="font-medium">Order Volume:</span>
-                      <br />
-                      {analysisData.analysis_parameters.order_volume.toLocaleString()} units
-                    </div>
-                    <div>
-                      <span className="font-medium">Warehouse:</span>
-                      <br />
-                      {analysisData.analysis_parameters.warehouse_name || 'Default'}
-                    </div>
-                    <div>
-                      <span className="font-medium">Suppliers Analyzed:</span>
-                      <br />
-                      {analysisData.overall_statistics.total_suppliers_analyzed}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* Parameters tab removed (now handled by sticky parameters panel above) */}
 
         <TabsContent value="recommendations">
           <div className="space-y-4">

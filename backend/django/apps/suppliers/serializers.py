@@ -13,6 +13,8 @@ from .models import (
     Currency,
     TaxRegion,
     Warehouse,
+    WarehouseInventory,
+    WarehouseCapacityAlert,
     VolumePricingTier,
     SeasonalPricing,
     ExternalTaxService
@@ -562,28 +564,41 @@ class OrderItemSerializer(serializers.ModelSerializer):
         model = OrderItem
         fields = ['id', 'material', 'material_name', 'material_unit',
                  'quantity', 'unit_price', 'total_price', 'notes',
+                 'volume_per_unit_m3', 'total_volume_m3', 'weight_per_unit_kg', 'total_weight_kg',
                  'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at', 'total_price']
+        read_only_fields = ['created_at', 'updated_at', 'total_price', 'total_volume_m3', 'total_weight_kg']
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    warehouse_name = serializers.CharField(source='destination_warehouse.name', read_only=True)
+    capacity_status = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
-        fields = ['order_id', 'supplier', 'supplier_name', 'order_date',
-                 'expected_delivery_date', 'actual_delivery_date', 'status',
-                 'total_amount', 'notes', 'items', 'created_by', 'created_by_name',
+        fields = ['order_id', 'supplier', 'supplier_name', 'destination_warehouse', 'warehouse_name',
+                 'order_date', 'expected_delivery_date', 'actual_delivery_date', 'status',
+                 'transport_mode', 'estimated_distance_km', 'estimated_transport_cost', 'estimated_co2_emissions',
+                 'total_volume_m3', 'total_weight_kg', 'total_amount', 'notes', 'items', 
+                 'created_by', 'created_by_name', 'capacity_status',
                  'created_at', 'updated_at']
-        read_only_fields = ['order_id', 'created_at', 'updated_at', 'created_by', 'total_amount']
+        read_only_fields = ['order_id', 'created_at', 'updated_at', 'created_by', 'total_amount',
+                           'total_volume_m3', 'total_weight_kg', 'estimated_distance_km', 
+                           'estimated_transport_cost', 'estimated_co2_emissions']
+    
+    def get_capacity_status(self, obj):
+        """Get warehouse capacity status for this order"""
+        if obj.destination_warehouse:
+            return obj.destination_warehouse.get_capacity_status()
+        return None
 
 class OrderCreateSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
     
     class Meta:
         model = Order
-        fields = ['supplier', 'expected_delivery_date', 'notes', 'items']
+        fields = ['supplier', 'destination_warehouse', 'expected_delivery_date', 'transport_mode', 'notes', 'items']
     
     def create(self, validated_data):
         items_data = validated_data.pop('items')
@@ -592,7 +607,54 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         for item_data in items_data:
             OrderItem.objects.create(order=order, **item_data)
         
+        # Calculate transportation details
+        from .services import OrderService
+        order_service = OrderService()
+        order_service.calculate_order_transportation(order)
+        
+        # Validate capacity
+        can_accommodate, message = order_service.validate_order_capacity(order)
+        if not can_accommodate:
+            # Add warning to order notes
+            if order.notes:
+                order.notes += f"\n\nCapacity Warning: {message}"
+            else:
+                order.notes = f"Capacity Warning: {message}"
+            order.save(update_fields=['notes'])
+        
         return order
+
+class WarehouseInventorySerializer(serializers.ModelSerializer):
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    material_name = serializers.CharField(source='material.name', read_only=True)
+    material_unit = serializers.CharField(source='material.unit', read_only=True)
+    stock_status = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = WarehouseInventory
+        fields = ['id', 'warehouse', 'warehouse_name', 'material', 'material_name', 'material_unit',
+                 'current_quantity', 'reserved_quantity', 'available_quantity',
+                 'total_volume_m3', 'total_weight_kg', 'minimum_stock_level', 'maximum_stock_level',
+                 'stock_status', 'is_low_stock', 'is_overstocked',
+                 'last_restocked_date', 'last_restocked_order', 'created_at', 'updated_at']
+        read_only_fields = ['available_quantity', 'stock_status', 'is_low_stock', 'is_overstocked',
+                           'created_at', 'updated_at']
+
+class WarehouseCapacityAlertSerializer(serializers.ModelSerializer):
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    material_name = serializers.CharField(source='material.name', read_only=True)
+    acknowledged_by_name = serializers.CharField(source='acknowledged_by.get_full_name', read_only=True)
+    alert_type_display = serializers.CharField(source='get_alert_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = WarehouseCapacityAlert
+        fields = ['id', 'warehouse', 'warehouse_name', 'alert_type', 'alert_type_display',
+                 'status', 'status_display', 'message', 'current_utilization', 'threshold_exceeded',
+                 'material', 'material_name', 'acknowledged_by', 'acknowledged_by_name',
+                 'acknowledged_at', 'resolved_at', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'acknowledged_by_name', 
+                           'alert_type_display', 'status_display']
 
 class SupplierAssessmentSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)

@@ -2,6 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { 
   MapPin, 
   Building2, 
@@ -17,7 +28,12 @@ import {
   Loader2,
   RefreshCw,
   Navigation,
-  Info
+  Info,
+  Warehouse,
+  AlertTriangle,
+  Truck,
+  Bell,
+  Clock
 } from 'lucide-react';
 
 // Simple toast implementation
@@ -57,6 +73,8 @@ interface Warehouse {
   storage_capacity: number | null;
   current_utilization: number | null;
   utilization_status: string;
+  max_capacity_threshold: number;
+  available_capacity_m3: number;
   manager_name: string;
   manager_email: string;
   manager_phone: string;
@@ -66,6 +84,47 @@ interface Warehouse {
   nearby_suppliers: number;
   created_at: string;
   updated_at: string;
+}
+
+interface CapacityStatus {
+  current_utilization_percent: number;
+  available_capacity_m3: number;
+  storage_capacity_m3: number;
+  threshold_percent: number;
+  is_over_threshold: boolean;
+  is_critical: boolean;
+  is_full: boolean;
+  status_level: string;
+}
+
+interface CapacityAlert {
+  id: string;
+  alert_type: string;
+  alert_type_display: string;
+  status: string;
+  message: string;
+  current_utilization: number;
+  created_at: string;
+}
+
+interface IncomingOrder {
+  order_id: string;
+  supplier_name: string;
+  status: string;
+  expected_delivery_date: string;
+  total_volume_m3: number;
+  total_amount: number;
+}
+
+interface InventoryItem {
+  id: string;
+  material_name: string;
+  material_unit: string;
+  current_quantity: number;
+  available_quantity: number;
+  total_volume_m3: number;
+  stock_status: string;
+  is_low_stock: boolean;
 }
 
 interface WarehouseDetailsProps {
@@ -94,7 +153,121 @@ export default function WarehouseDetails({ warehouse, onEdit, onClose }: Warehou
     suggestions: string[];
     addressTried: string;
   } | null>(null);
+  
+  // Capacity-related state
+  const [capacityStatus, setCapacityStatus] = useState<CapacityStatus | null>(null);
+  const [capacityAlerts, setCapacityAlerts] = useState<CapacityAlert[]>([]);
+  const [incomingOrders, setIncomingOrders] = useState<IncomingOrder[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [loadingCapacity, setLoadingCapacity] = useState(false);
+  const [refreshingCapacity, setRefreshingCapacity] = useState(false);
+  
   const { toast } = useToast();
+
+  // Load capacity data when component mounts
+  useEffect(() => {
+    loadCapacityData();
+  }, [warehouse.id]);
+
+  const loadCapacityData = async () => {
+    try {
+      setLoadingCapacity(true);
+      await Promise.all([
+        loadCapacityStatus(),
+        loadCapacityAlerts(),
+        loadIncomingOrders(),
+        loadInventoryItems()
+      ]);
+    } catch (error) {
+      console.error('Failed to load capacity data:', error);
+    } finally {
+      setLoadingCapacity(false);
+    }
+  };
+
+  const loadCapacityStatus = async () => {
+    try {
+      const response = await fetch(`/api/suppliers/warehouses/${warehouse.id}/capacity_status/`);
+      const data = await response.json();
+      setCapacityStatus(data.capacity_status);
+    } catch (error) {
+      console.error('Failed to load capacity status:', error);
+    }
+  };
+
+  const loadCapacityAlerts = async () => {
+    try {
+      const response = await fetch(`/api/suppliers/capacity-alerts/by_warehouse/?warehouse_id=${warehouse.id}`);
+      const data = await response.json();
+      setCapacityAlerts(data.results || data);
+    } catch (error) {
+      console.error('Failed to load capacity alerts:', error);
+    }
+  };
+
+  const loadIncomingOrders = async () => {
+    try {
+      const response = await fetch(`/api/suppliers/warehouses/${warehouse.id}/incoming_orders/`);
+      const data = await response.json();
+      setIncomingOrders(data.incoming_orders || []);
+    } catch (error) {
+      console.error('Failed to load incoming orders:', error);
+    }
+  };
+
+  const loadInventoryItems = async () => {
+    try {
+      const response = await fetch(`/api/suppliers/warehouse-inventory/by_warehouse/?warehouse_id=${warehouse.id}`);
+      const data = await response.json();
+      setInventoryItems(data.results || data);
+    } catch (error) {
+      console.error('Failed to load inventory items:', error);
+    }
+  };
+
+  const refreshCapacity = async () => {
+    try {
+      setRefreshingCapacity(true);
+      const response = await fetch(`/api/suppliers/warehouses/${warehouse.id}/update_capacity/`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        await loadCapacityData();
+        toast({
+          title: 'Capacity Updated',
+          description: 'Warehouse capacity has been refreshed successfully.'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to refresh capacity:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to refresh warehouse capacity.',
+        variant: 'destructive'
+      });
+    } finally {
+      setRefreshingCapacity(false);
+    }
+  };
+
+  const acknowledgeAlert = async (alertId: string) => {
+    try {
+      const response = await fetch(`/api/suppliers/capacity-alerts/${alertId}/acknowledge/`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        await loadCapacityAlerts();
+        toast({
+          title: 'Alert Acknowledged',
+          description: 'The capacity alert has been acknowledged.'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to acknowledge alert:', error);
+    }
+  };
 
   const getUtilizationColor = (status: string) => {
     switch (status) {
@@ -103,6 +276,48 @@ export default function WarehouseDetails({ warehouse, onEdit, onClose }: Warehou
       case 'High': return 'bg-orange-100 text-orange-800';
       case 'Critical': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getCapacityBadge = (capacityStatus: CapacityStatus) => {
+    if (capacityStatus.is_full) {
+      return <Badge variant="destructive">Full Capacity</Badge>;
+    } else if (capacityStatus.is_critical) {
+      return <Badge variant="destructive">Critical</Badge>;
+    } else if (capacityStatus.is_over_threshold) {
+      return <Badge variant="secondary">Over Threshold</Badge>;
+    } else {
+      return <Badge variant="outline">Normal</Badge>;
+    }
+  };
+
+  const getAlertBadge = (alertType: string) => {
+    const alertConfig = {
+      capacity_warning: { color: 'secondary', label: 'Warning' },
+      capacity_critical: { color: 'destructive', label: 'Critical' },
+      capacity_full: { color: 'destructive', label: 'Full' },
+      low_stock: { color: 'yellow', label: 'Low Stock' },
+      out_of_stock: { color: 'destructive', label: 'Out of Stock' }
+    };
+
+    const config = alertConfig[alertType as keyof typeof alertConfig] || { color: 'secondary', label: alertType };
+    
+    return (
+      <Badge variant={config.color as any}>
+        {config.label}
+      </Badge>
+    );
+  };
+
+  const getStockStatusBadge = (status: string, isLowStock: boolean) => {
+    if (status === 'out_of_stock') {
+      return <Badge variant="destructive">Out of Stock</Badge>;
+    } else if (isLowStock) {
+      return <Badge variant="secondary">Low Stock</Badge>;
+    } else if (status === 'overstocked') {
+      return <Badge variant="outline">Overstocked</Badge>;
+    } else {
+      return <Badge variant="outline">Normal</Badge>;
     }
   };
 
@@ -117,7 +332,7 @@ export default function WarehouseDetails({ warehouse, onEdit, onClose }: Warehou
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-CA', {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
@@ -637,6 +852,267 @@ export default function WarehouseDetails({ warehouse, onEdit, onClose }: Warehou
                   </div>
                 </div>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Capacity Alerts */}
+      {capacityAlerts.length > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-2">
+              <div className="font-medium">{capacityAlerts.length} active capacity alert(s)</div>
+              {capacityAlerts.slice(0, 2).map((alert) => (
+                <div key={alert.id} className="flex items-center justify-between text-sm">
+                  <span>• {alert.message}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => acknowledgeAlert(alert.id)}
+                  >
+                    Acknowledge
+                  </Button>
+                </div>
+              ))}
+              {capacityAlerts.length > 2 && (
+                <div className="text-sm">And {capacityAlerts.length - 2} more alerts...</div>
+              )}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Warehouse Capacity Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Warehouse className="h-5 w-5" />
+              <span>Capacity Status</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refreshCapacity}
+              disabled={refreshingCapacity}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshingCapacity ? 'animate-spin' : ''}`} />
+              {refreshingCapacity ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingCapacity ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="ml-2">Loading capacity data...</span>
+            </div>
+          ) : capacityStatus ? (
+            <div className="space-y-4">
+              {/* Current Utilization */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">Current Utilization</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold">
+                      {(Number(capacityStatus.current_utilization_percent) || 0).toFixed(1)}%
+                    </span>
+                    {getCapacityBadge(capacityStatus)}
+                  </div>
+                </div>
+                <Progress value={Number(capacityStatus.current_utilization_percent) || 0} className="h-3" />
+              </div>
+
+              {/* Capacity Details */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Available Capacity:</span>
+                  <div className="font-medium">{capacityStatus.available_capacity_m3.toFixed(2)}m³</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Total Capacity:</span>
+                  <div className="font-medium">{capacityStatus.storage_capacity_m3.toFixed(2)}m³</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Alert Threshold:</span>
+                  <div className="font-medium">{capacityStatus.threshold_percent.toFixed(0)}%</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status Level:</span>
+                  <div className="font-medium capitalize">{capacityStatus.status_level}</div>
+                </div>
+              </div>
+
+              {/* Capacity Warnings */}
+              {capacityStatus.is_over_threshold && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-yellow-800">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="font-medium">Capacity Warning</span>
+                  </div>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    {capacityStatus.is_full 
+                      ? 'Warehouse is at full capacity!'
+                      : capacityStatus.is_critical
+                      ? 'Warehouse is at critical capacity level!'
+                      : 'Warehouse utilization exceeds threshold.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">
+              <Package className="h-8 w-8 mx-auto mb-2" />
+              <p>No capacity data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Incoming Orders */}
+      {incomingOrders.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Truck className="h-5 w-5" />
+              <span>Incoming Orders ({incomingOrders.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Expected Delivery</TableHead>
+                  <TableHead>Volume</TableHead>
+                  <TableHead>Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {incomingOrders.slice(0, 5).map((order) => (
+                  <TableRow key={order.order_id}>
+                    <TableCell className="font-mono text-sm">
+                      {order.order_id.slice(0, 8)}...
+                    </TableCell>
+                    <TableCell>{order.supplier_name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize">
+                        {order.status.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(order.expected_delivery_date).toLocaleDateString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>{order.total_volume_m3?.toFixed(2) || '-'}m³</TableCell>
+                    <TableCell>${order.total_amount.toFixed(2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {incomingOrders.length > 5 && (
+              <div className="text-center mt-3 text-sm text-muted-foreground">
+                And {incomingOrders.length - 5} more orders...
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Current Inventory */}
+      {inventoryItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Package className="h-5 w-5" />
+              <span>Current Inventory ({inventoryItems.length} items)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Material</TableHead>
+                  <TableHead>Current Stock</TableHead>
+                  <TableHead>Available</TableHead>
+                  <TableHead>Volume</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {inventoryItems.slice(0, 10).map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      <div className="font-medium">{item.material_name}</div>
+                    </TableCell>
+                    <TableCell>
+                      {item.current_quantity.toFixed(2)} {item.material_unit}
+                    </TableCell>
+                    <TableCell>
+                      {item.available_quantity.toFixed(2)} {item.material_unit}
+                    </TableCell>
+                    <TableCell>
+                      {item.total_volume_m3?.toFixed(2) || '-'}m³
+                    </TableCell>
+                    <TableCell>
+                      {getStockStatusBadge(item.stock_status, item.is_low_stock)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {inventoryItems.length > 10 && (
+              <div className="text-center mt-3 text-sm text-muted-foreground">
+                And {inventoryItems.length - 10} more items...
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active Capacity Alerts */}
+      {capacityAlerts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Bell className="h-5 w-5" />
+              <span>Active Alerts ({capacityAlerts.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {capacityAlerts.map((alert) => (
+                <div key={alert.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      {getAlertBadge(alert.alert_type)}
+                      <span className="text-sm text-muted-foreground">
+                        {new Date(alert.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-sm">{alert.message}</p>
+                    {alert.current_utilization && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Utilization: {(Number(alert.current_utilization) || 0).toFixed(1)}%
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => acknowledgeAlert(alert.id)}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Acknowledge
+                  </Button>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

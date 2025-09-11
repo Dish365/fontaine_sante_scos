@@ -540,3 +540,179 @@ class UserService:
         Close the HTTP client
         """
         await self.client.aclose()
+
+class OrderService(BaseService):
+    """Service for order management and warehouse capacity updates"""
+    
+    def process_order_delivery(self, order_id):
+        """Process order delivery and update warehouse inventory"""
+        from .models import Order, WarehouseInventory
+        
+        try:
+            order = Order.objects.get(order_id=order_id)
+            
+            if order.status != 'delivered':
+                logger.warning(f"Order {order_id} is not marked as delivered")
+                return False
+            
+            # Update warehouse inventory for each order item
+            for item in order.items.all():
+                inventory, created = WarehouseInventory.objects.get_or_create(
+                    warehouse=order.destination_warehouse,
+                    material=item.material,
+                    defaults={
+                        'current_quantity': 0,
+                        'total_volume_m3': 0,
+                        'total_weight_kg': 0,
+                    }
+                )
+                
+                # Add delivered quantities
+                inventory.current_quantity += item.quantity
+                if item.total_volume_m3:
+                    inventory.total_volume_m3 += item.total_volume_m3
+                if item.total_weight_kg:
+                    inventory.total_weight_kg += item.total_weight_kg
+                
+                inventory.last_restocked_date = order.actual_delivery_date or timezone.now()
+                inventory.last_restocked_order = order
+                inventory.save()
+            
+            # Update warehouse capacity utilization
+            order.destination_warehouse.update_capacity_utilization()
+            
+            logger.info(f"Successfully processed delivery for order {order_id}")
+            return True
+            
+        except Order.DoesNotExist:
+            logger.error(f"Order {order_id} not found")
+            return False
+        except Exception as e:
+            logger.error(f"Error processing order delivery {order_id}: {str(e)}")
+            return False
+    
+    def validate_order_capacity(self, order):
+        """Validate if warehouse can accommodate the order"""
+        from .models import Order
+        
+        try:
+            if not order.destination_warehouse.storage_capacity:
+                return True, "Warehouse capacity not configured - cannot validate"
+            
+            can_accommodate = order.destination_warehouse.can_accommodate_order(order)
+            
+            if not can_accommodate:
+                available = order.destination_warehouse.get_available_capacity_m3()
+                required = float(order.total_volume_m3 or 0)
+                message = (f"Warehouse {order.destination_warehouse.name} cannot accommodate "
+                          f"order volume {required:.2f}m³. Available capacity: {available:.2f}m³")
+                return False, message
+            
+            return True, "Order can be accommodated"
+            
+        except Exception as e:
+            logger.error(f"Error validating order capacity: {str(e)}")
+            return False, f"Error validating capacity: {str(e)}"
+    
+    def calculate_order_transportation(self, order):
+        """Calculate transportation costs and emissions for an order"""
+        try:
+            if not (order.supplier.latitude and order.supplier.longitude and 
+                    order.destination_warehouse.latitude and order.destination_warehouse.longitude):
+                return None
+            
+            # Calculate distance using Haversine formula
+            from math import radians, cos, sin, asin, sqrt
+            
+            lat1, lon1 = radians(float(order.supplier.latitude)), radians(float(order.supplier.longitude))
+            lat2, lon2 = radians(float(order.destination_warehouse.latitude)), radians(float(order.destination_warehouse.longitude))
+            
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+            distance_km = 2 * asin(sqrt(a)) * 6371  # Earth's radius in km
+            
+            # Transportation cost and emission factors
+            transport_factors = {
+                'truck': {'cost_per_km': 2.50, 'emission_factor': 0.162},
+                'train': {'cost_per_km': 1.20, 'emission_factor': 0.041},
+                'ship': {'cost_per_km': 0.80, 'emission_factor': 0.017},
+                'plane': {'cost_per_km': 8.00, 'emission_factor': 0.602},
+                'mixed': {'cost_per_km': 2.00, 'emission_factor': 0.120},
+            }
+            
+            factors = transport_factors.get(order.transport_mode, transport_factors['truck'])
+            
+            # Calculate costs and emissions
+            total_weight_tons = float(order.total_weight_kg or 1000) / 1000  # Convert kg to tons
+            transport_cost = distance_km * factors['cost_per_km'] * total_weight_tons
+            co2_emissions = distance_km * factors['emission_factor'] * total_weight_tons
+            
+            # Update order with calculations
+            order.estimated_distance_km = distance_km
+            order.estimated_transport_cost = transport_cost
+            order.estimated_co2_emissions = co2_emissions
+            order.save(update_fields=['estimated_distance_km', 'estimated_transport_cost', 'estimated_co2_emissions'])
+            
+            return {
+                'distance_km': distance_km,
+                'transport_cost': transport_cost,
+                'co2_emissions': co2_emissions,
+                'transport_mode': order.transport_mode
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculating transportation for order {order.order_id}: {str(e)}")
+            return None
+
+class WarehouseCapacityService(BaseService):
+    """Service for warehouse capacity management"""
+    
+    def update_all_warehouse_capacities(self):
+        """Update capacity utilization for all warehouses"""
+        from .models import Warehouse
+        
+        updated_count = 0
+        for warehouse in Warehouse.objects.all():
+            try:
+                warehouse.update_capacity_utilization()
+                updated_count += 1
+            except Exception as e:
+                logger.error(f"Error updating capacity for warehouse {warehouse.id}: {str(e)}")
+        
+        logger.info(f"Updated capacity for {updated_count} warehouses")
+        return updated_count
+    
+    def get_capacity_alerts(self, warehouse_id=None, alert_type=None, status='active'):
+        """Get capacity alerts with optional filters"""
+        from .models import WarehouseCapacityAlert
+        
+        queryset = WarehouseCapacityAlert.objects.filter(status=status)
+        
+        if warehouse_id:
+            queryset = queryset.filter(warehouse_id=warehouse_id)
+        if alert_type:
+            queryset = queryset.filter(alert_type=alert_type)
+        
+        return queryset.select_related('warehouse', 'material').order_by('-created_at')
+    
+    def acknowledge_alert(self, alert_id, user):
+        """Acknowledge a capacity alert"""
+        from .models import WarehouseCapacityAlert
+        
+        try:
+            alert = WarehouseCapacityAlert.objects.get(id=alert_id)
+            alert.status = 'acknowledged'
+            alert.acknowledged_by = user
+            alert.acknowledged_at = timezone.now()
+            alert.save()
+            
+            logger.info(f"Alert {alert_id} acknowledged by {user.username}")
+            return True
+            
+        except WarehouseCapacityAlert.DoesNotExist:
+            logger.error(f"Alert {alert_id} not found")
+            return False
+        except Exception as e:
+            logger.error(f"Error acknowledging alert {alert_id}: {str(e)}")
+            return False

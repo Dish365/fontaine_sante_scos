@@ -968,6 +968,105 @@ class Warehouse(models.Model):
             )
         except Exception:
             return None
+    
+    def get_current_volume_utilization(self):
+        """Calculate current volume utilization from inventory"""
+        total_volume = self.inventory_items.aggregate(
+            total=models.Sum('total_volume_m3')
+        )['total'] or 0
+        
+        if self.storage_capacity and self.storage_capacity > 0:
+            utilization = (total_volume / float(self.storage_capacity)) * 100
+            return min(utilization, 100)  # Cap at 100%
+        return 0
+    
+    def get_available_capacity_m3(self):
+        """Get available capacity in cubic meters"""
+        if not self.storage_capacity:
+            return 0
+        
+        current_volume = self.inventory_items.aggregate(
+            total=models.Sum('total_volume_m3')
+        )['total'] or 0
+        
+        return max(0, float(self.storage_capacity) - current_volume)
+    
+    def update_capacity_utilization(self):
+        """Update the current utilization field based on inventory"""
+        utilization = self.get_current_volume_utilization()
+        if self.current_utilization != utilization:
+            self.current_utilization = utilization
+            self.save(update_fields=['current_utilization', 'updated_at'])
+            
+            # Check for capacity alerts
+            self.check_capacity_alerts()
+        
+        return utilization
+    
+    def check_capacity_alerts(self):
+        """Check and create capacity alerts if needed"""
+        current_util = float(self.current_utilization or 0)
+        threshold = float(self.max_capacity_threshold)
+        
+        # Check for existing active alerts
+        existing_alerts = self.capacity_alerts.filter(
+            alert_type__in=['capacity_warning', 'capacity_critical', 'capacity_full'],
+            status='active'
+        ).exists()
+        
+        if current_util >= 100 and not existing_alerts:
+            # Warehouse is full
+            WarehouseCapacityAlert.objects.create(
+                warehouse=self,
+                alert_type='capacity_full',
+                message=f"Warehouse {self.name} is at full capacity (100%)",
+                current_utilization=current_util,
+                threshold_exceeded=100
+            )
+        elif current_util >= threshold + 5 and not existing_alerts:
+            # Critical capacity
+            WarehouseCapacityAlert.objects.create(
+                warehouse=self,
+                alert_type='capacity_critical',
+                message=f"Warehouse {self.name} is at critical capacity ({current_util:.1f}%)",
+                current_utilization=current_util,
+                threshold_exceeded=threshold
+            )
+        elif current_util >= threshold and not existing_alerts:
+            # Warning capacity
+            WarehouseCapacityAlert.objects.create(
+                warehouse=self,
+                alert_type='capacity_warning',
+                message=f"Warehouse {self.name} is approaching capacity limit ({current_util:.1f}%)",
+                current_utilization=current_util,
+                threshold_exceeded=threshold
+            )
+    
+    def can_accommodate_order(self, order):
+        """Check if warehouse can accommodate an incoming order"""
+        if not order.total_volume_m3 or not self.storage_capacity:
+            return True  # Can't verify capacity without volume data
+        
+        available_capacity = self.get_available_capacity_m3()
+        return available_capacity >= float(order.total_volume_m3)
+    
+    def get_capacity_status(self):
+        """Get detailed capacity status information"""
+        current_util = self.get_current_volume_utilization()
+        available_capacity = self.get_available_capacity_m3()
+        
+        status = {
+            'current_utilization_percent': current_util,
+            'available_capacity_m3': available_capacity,
+            'storage_capacity_m3': float(self.storage_capacity or 0),
+            'threshold_percent': float(self.max_capacity_threshold),
+            'is_over_threshold': current_util >= float(self.max_capacity_threshold),
+            'is_critical': current_util >= float(self.max_capacity_threshold) + 5,
+            'is_full': current_util >= 100,
+            'status_level': self.utilization_status.lower()
+        }
+        
+        return status
 
 class Currency(models.Model):
     """Supported currencies"""
@@ -1580,11 +1679,25 @@ class Order(models.Model):
         ('cancelled', 'Cancelled')
     ]
     
+    TRANSPORT_MODE_CHOICES = [
+        ('truck', 'Truck'),
+        ('train', 'Train'),
+        ('ship', 'Ship'),
+        ('plane', 'Plane'),
+        ('mixed', 'Mixed Transport'),
+    ]
+    
     order_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     supplier = models.ForeignKey(
         Supplier,
         on_delete=models.CASCADE,
         related_name='orders'
+    )
+    destination_warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.CASCADE,
+        related_name='incoming_orders',
+        help_text="Warehouse where materials will be delivered"
     )
     order_date = models.DateTimeField(auto_now_add=True)
     expected_delivery_date = models.DateField()
@@ -1593,6 +1706,51 @@ class Order(models.Model):
         max_length=20,
         choices=STATUS_CHOICES,
         default='pending'
+    )
+    transport_mode = models.CharField(
+        max_length=20,
+        choices=TRANSPORT_MODE_CHOICES,
+        default='truck',
+        help_text="Transportation mode for this order"
+    )
+    estimated_distance_km = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Estimated distance from supplier to warehouse (km)"
+    )
+    estimated_transport_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Estimated transportation cost"
+    )
+    estimated_co2_emissions = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Estimated CO2 emissions (kg CO2e)"
+    )
+    total_volume_m3 = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Total volume of materials in cubic meters"
+    )
+    total_weight_kg = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Total weight of materials in kilograms"
     )
     total_amount = models.DecimalField(
         max_digits=12,
@@ -1616,8 +1774,17 @@ class Order(models.Model):
         return f"Order {self.order_id} - {self.supplier.name}"
     
     def save(self, *args, **kwargs):
-        if not self.total_amount:
-            self.total_amount = sum(item.total_price for item in self.items.all())
+        # Calculate totals from order items
+        if self.pk:  # Only if order exists (has items)
+            items = self.items.all()
+            if not self.total_amount and items.exists():
+                self.total_amount = sum(item.total_price for item in items)
+            
+            # Calculate total volume and weight
+            if items.exists():
+                self.total_volume_m3 = sum(item.total_volume_m3 or 0 for item in items)
+                self.total_weight_kg = sum(item.total_weight_kg or 0 for item in items)
+        
         super().save(*args, **kwargs)
 
 class OrderItem(models.Model):
@@ -1642,6 +1809,39 @@ class OrderItem(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(0)]
     )
+    # Volume and weight calculations for warehouse capacity
+    volume_per_unit_m3 = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Volume per unit in cubic meters"
+    )
+    total_volume_m3 = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Total volume (quantity × volume_per_unit)"
+    )
+    weight_per_unit_kg = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Weight per unit in kilograms"
+    )
+    total_weight_kg = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Total weight (quantity × weight_per_unit)"
+    )
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1653,9 +1853,204 @@ class OrderItem(models.Model):
         return f"{self.material.name} - {self.quantity} {self.material.unit}"
     
     def save(self, *args, **kwargs):
+        # Calculate total price
         if not self.total_price:
             self.total_price = self.quantity * self.unit_price
+        
+        # Calculate total volume
+        if self.volume_per_unit_m3 and self.quantity:
+            self.total_volume_m3 = self.quantity * self.volume_per_unit_m3
+        
+        # Calculate total weight
+        if self.weight_per_unit_kg and self.quantity:
+            self.total_weight_kg = self.quantity * self.weight_per_unit_kg
+            
         super().save(*args, **kwargs)
+
+class WarehouseInventory(models.Model):
+    """Track inventory levels of materials in warehouses"""
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.CASCADE,
+        related_name='inventory_items'
+    )
+    material = models.ForeignKey(
+        Material,
+        on_delete=models.CASCADE,
+        related_name='warehouse_stocks'
+    )
+    current_quantity = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Current quantity in stock"
+    )
+    reserved_quantity = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Quantity reserved for pending orders"
+    )
+    available_quantity = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Available quantity (current - reserved)"
+    )
+    total_volume_m3 = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Total volume occupied by this material"
+    )
+    total_weight_kg = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Total weight of this material in stock"
+    )
+    minimum_stock_level = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Minimum stock level alert threshold"
+    )
+    maximum_stock_level = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Maximum stock level"
+    )
+    last_restocked_date = models.DateTimeField(null=True, blank=True)
+    last_restocked_order = models.ForeignKey(
+        Order,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='restocked_inventory'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['warehouse', 'material']
+        ordering = ['warehouse__name', 'material__name']
+        indexes = [
+            models.Index(fields=['warehouse', 'material']),
+            models.Index(fields=['current_quantity']),
+            models.Index(fields=['available_quantity']),
+        ]
+    
+    def __str__(self):
+        return f"{self.warehouse.name} - {self.material.name}: {self.current_quantity} {self.material.unit}"
+    
+    @property
+    def is_low_stock(self):
+        """Check if current stock is below minimum level"""
+        if self.minimum_stock_level:
+            return self.current_quantity <= self.minimum_stock_level
+        return False
+    
+    @property
+    def is_overstocked(self):
+        """Check if current stock is above maximum level"""
+        if self.maximum_stock_level:
+            return self.current_quantity >= self.maximum_stock_level
+        return False
+    
+    @property
+    def stock_status(self):
+        """Get stock status"""
+        if self.is_low_stock:
+            return 'low'
+        elif self.is_overstocked:
+            return 'overstocked'
+        elif self.current_quantity == 0:
+            return 'out_of_stock'
+        else:
+            return 'normal'
+    
+    def save(self, *args, **kwargs):
+        # Calculate available quantity
+        self.available_quantity = max(0, self.current_quantity - self.reserved_quantity)
+        super().save(*args, **kwargs)
+
+class WarehouseCapacityAlert(models.Model):
+    """Track warehouse capacity alerts"""
+    ALERT_TYPES = [
+        ('capacity_warning', 'Capacity Warning'),
+        ('capacity_critical', 'Capacity Critical'),
+        ('capacity_full', 'Capacity Full'),
+        ('low_stock', 'Low Stock Alert'),
+        ('out_of_stock', 'Out of Stock Alert'),
+    ]
+    
+    ALERT_STATUS = [
+        ('active', 'Active'),
+        ('acknowledged', 'Acknowledged'),
+        ('resolved', 'Resolved'),
+    ]
+    
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.CASCADE,
+        related_name='capacity_alerts'
+    )
+    alert_type = models.CharField(max_length=20, choices=ALERT_TYPES)
+    status = models.CharField(max_length=15, choices=ALERT_STATUS, default='active')
+    message = models.TextField(help_text="Alert message")
+    current_utilization = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Current utilization percentage when alert was created"
+    )
+    threshold_exceeded = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Threshold that was exceeded"
+    )
+    material = models.ForeignKey(
+        Material,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Related material for stock alerts"
+    )
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acknowledged_alerts'
+    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['warehouse', 'status']),
+            models.Index(fields=['alert_type', 'status']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.warehouse.name} - {self.get_alert_type_display()}"
 
 class SupplierAssessment(models.Model):
     STATUS_CHOICES = [

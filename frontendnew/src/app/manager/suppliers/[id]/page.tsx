@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ChevronLeft, ChevronRight, Save } from 'lucide-react';
 import { Supplier } from './types/supplier';
+import { supplierApi } from '@/lib/api';
 import BasicInfoForm from './components/BasicInfoForm';
 import CapacityInfoForm from './components/CapacityInfoForm';
 import TransportationForm from './components/TransportationForm';
@@ -39,10 +40,8 @@ export default function UpdateSupplierPage() {
   useEffect(() => {
     const fetchSupplier = async () => {
       try {
-        const response = await fetch(`/api/suppliers/${id}`);
-        if (!response.ok) throw new Error('Failed to fetch supplier');
-        const data = await response.json();
-        setSupplier(data);
+        const data = await supplierApi.getSupplierById(String(id));
+        setSupplier(data as Supplier);
       } catch (error) {
         console.error('Error fetching supplier:', error);
       } finally {
@@ -60,17 +59,7 @@ export default function UpdateSupplierPage() {
 
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/suppliers/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(supplier),
-      });
-
-      if (!response.ok) throw new Error('Failed to update supplier');
-      
-      // Navigate back to suppliers list on success
+      await supplierApi.updateSupplier(String(id), supplier);
       router.push('/manager/suppliers');
     } catch (error) {
       console.error('Error updating supplier:', error);

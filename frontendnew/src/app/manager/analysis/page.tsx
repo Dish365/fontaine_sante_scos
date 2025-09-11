@@ -49,7 +49,7 @@ export default function AnalysisPage() {
       description: 'Multi-criteria decision making and optimization',
       color: 'red',
       icon: '⚖️',
-      href: '/manager/analysis/tradeoff',
+      href: '/manager/analysis/trade-off',
       features: ['Balanced Scoring', 'Risk Assessment', 'Optimization Matrix', 'Decision Support']
     },
     {

@@ -301,7 +301,24 @@ export default function ManagerDashboardPage() {
                   <p className="text-sm text-orange-700">Generate comprehensive business reports</p>
                 </div>
                 
-                {/* Settings - Teal Gradient */}
+                {/* Orders Management - Red Gradient */}
+                <div 
+                  onClick={() => router.push('/manager/orders')} 
+                  className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-red-500 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M8 11v6h8v-6M8 11H6a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2v-6a2 2 0 00-2-2h-2" />
+                      </svg>
+                    </div>
+                    <span className="text-2xl font-bold text-red-700">📋</span>
+                  </div>
+                  <h3 className="font-semibold text-red-900 mb-2">Orders Management</h3>
+                  <p className="text-sm text-red-700">Track orders with warehouse capacity monitoring</p>
+                </div>
+                
+{/* Settings - Teal Gradient */}
                 <div 
                   onClick={() => router.push('/manager/settings')} 
                   className="bg-gradient-to-br from-teal-50 to-teal-100 border border-teal-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
@@ -402,7 +419,7 @@ export default function ManagerDashboardPage() {
 
                 {/* Trade-off Analysis Engine - Red Gradient */}
                 <div 
-                  onClick={() => router.push('/manager/analysis')} 
+                  onClick={() => router.push('/manager/analysis/trade-off')} 
                   className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
                 >
                   <div className="flex items-center justify-between mb-4">

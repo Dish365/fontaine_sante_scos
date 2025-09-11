@@ -1,182 +1,248 @@
-import {
-  LoginRequest,
-  LoginResponse,
-  OTPVerifyRequest,
-  OTPVerifyResponse,
-  OTPRequestRequest,
-  OTPRequestResponse,
-  AdminUserRegistrationRequest,
-  AdminUserRegistrationResponse,
-  SecurityQuestionsResponse,
-  SecurityQuestionRequest,
-  PasswordResetRequestRequest,
-  PasswordResetConfirmRequest,
-  User,
-} from '@/types/auth';
+// API configuration and utilities
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-class ApiError extends Error {
-  constructor(public status: number, message: string, public data?: any) {
-    super(message);
-    this.name = 'ApiError';
-  }
+interface ApiResponse<T> {
+  results?: T[];
+  data?: T;
+  count?: number;
+  next?: string;
+  previous?: string;
 }
 
-async function fetchApi<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
-  
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-  
-  const config: RequestInit = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
-    ...options,
-  };
+class ApiClient {
+  private baseUrl: string;
+  private defaultHeaders: Record<string, string>;
 
-  try {
-    const response = await fetch(url, config);
+  constructor() {
+    this.baseUrl = API_BASE_URL;
+    this.defaultHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.error || errorData.detail || errorData.message || 'Request failed';
-      throw new ApiError(response.status, errorMessage, errorData);
+    const config: RequestInit = {
+      ...options,
+      headers: {
+        ...this.defaultHeaders,
+        ...options.headers,
+      },
+    };
+
+    // Add authentication token if available
+    const token = this.getAuthToken();
+    if (token) {
+      config.headers = {
+        ...config.headers,
+        'Authorization': `Bearer ${token}`,
+      };
     }
 
-    return await response.json();
-  } catch (error) {
-    if (error instanceof ApiError) {
+    // Add CSRF token if available
+    const csrfToken = this.getCSRFToken();
+    if (csrfToken && (options.method === 'POST' || options.method === 'PUT' || options.method === 'DELETE')) {
+      config.headers = {
+        ...config.headers,
+        'X-CSRFToken': csrfToken,
+      };
+    }
+
+    try {
+      const response = await fetch(url, config);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorData;
+        
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: errorText || `HTTP ${response.status}` };
+        }
+        
+        throw new Error(errorData.message || `Request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`API request failed for ${endpoint}:`, error);
       throw error;
     }
-    throw new ApiError(0, 'Network error occurred', error);
+  }
+
+  private getAuthToken(): string | null {
+    // Try to get auth token from localStorage
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('access_token');
+    }
+    return null;
+  }
+
+  private getCSRFToken(): string | null {
+    // Try to get CSRF token from cookie
+    if (typeof window !== 'undefined') {
+      const cookies = document.cookie.split(';');
+      for (let cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'csrftoken') {
+          return value;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Suppliers API
+  async getSuppliers() {
+    const response = await this.request<ApiResponse<any>>('/api/suppliers/suppliers/');
+    return response.results || [];
+  }
+
+  // Warehouses API
+  async getWarehouses() {
+    const response = await this.request<ApiResponse<any>>('/api/suppliers/warehouses/');
+    return response.results || [];
+  }
+
+  // Materials API
+  async getMaterials() {
+    const response = await this.request<ApiResponse<any>>('/api/suppliers/materials/');
+    return response.results || [];
+  }
+
+  // Orders API
+  async getOrders() {
+    const response = await this.request<ApiResponse<any>>('/api/suppliers/orders/');
+    return response.results || [];
+  }
+
+  async createOrder(orderData: any) {
+    return await this.request('/api/suppliers/orders/', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async updateOrder(orderId: string, orderData: any) {
+    return await this.request(`/api/suppliers/orders/${orderId}/`, {
+      method: 'PUT',
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async getOrder(orderId: string) {
+    return await this.request(`/api/suppliers/orders/${orderId}/`);
+  }
+
+  async markOrderDelivered(orderId: string) {
+    return await this.request(`/api/suppliers/orders/${orderId}/mark_delivered/`, {
+      method: 'POST',
+    });
+  }
+
+  // Warehouse capacity API
+  async getWarehouseCapacity(warehouseId: string) {
+    return await this.request(`/api/suppliers/warehouses/${warehouseId}/capacity_status/`);
+  }
+
+  async getCapacityAlerts(warehouseId?: string) {
+    const endpoint = warehouseId 
+      ? `/api/suppliers/capacity-alerts/by_warehouse/?warehouse_id=${warehouseId}`
+      : '/api/suppliers/capacity-alerts/';
+    return await this.request<ApiResponse<any>>(endpoint);
+  }
+
+  async acknowledgeAlert(alertId: string) {
+    return await this.request(`/api/suppliers/capacity-alerts/${alertId}/acknowledge/`, {
+      method: 'POST',
+    });
+  }
+
+  // Authentication API methods
+  async login(staffId: string, password: string) {
+    return await this.request('/api/users/login/', {
+      method: 'POST',
+      body: JSON.stringify({ staff_id: staffId, password }),
+    });
+  }
+
+  async logout() {
+    return await this.request('/api/users/logout/', {
+      method: 'POST',
+    });
+  }
+
+  async getCurrentUser() {
+    return await this.request('/api/users/profile/');
+  }
+
+  async refreshToken() {
+    return await this.request('/api/users/token/refresh/', {
+      method: 'POST',
+    });
+  }
+
+  async register(userData: any) {
+    return await this.request('/api/users/register/', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  }
+
+  async verifyOTP(otpData: { email: string; otp: string; method: 'email' | 'phone' }) {
+    return await this.request('/api/users/login/verify/', {
+      method: 'POST',
+      body: JSON.stringify(otpData),
+    });
+  }
+
+  async requestOTP(otpRequest: { email: string; method: 'email' | 'phone' }) {
+    return await this.request('/api/users/otp/request/', {
+      method: 'POST',
+      body: JSON.stringify(otpRequest),
+    });
   }
 }
 
-export const authApi = {
-  // Login with staff_id and password
-  login: async (data: LoginRequest): Promise<LoginResponse> => {
-    return fetchApi<LoginResponse>('/api/users/login/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
+// Export singleton instance
+export const apiClient = new ApiClient();
 
-  // Verify OTP and complete login
-  verifyOTP: async (data: OTPVerifyRequest): Promise<OTPVerifyResponse> => {
-    return fetchApi<OTPVerifyResponse>('/api/users/login/verify/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // Request new OTP
-  requestOTP: async (data: OTPRequestRequest): Promise<OTPRequestResponse> => {
-    return fetchApi<OTPRequestResponse>('/api/users/otp/request/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // Admin user registration
-  registerUser: async (data: AdminUserRegistrationRequest): Promise<AdminUserRegistrationResponse> => {
-    return fetchApi<AdminUserRegistrationResponse>('/api/users/register/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // Get security questions
-  getSecurityQuestions: async (email: string): Promise<SecurityQuestionsResponse> => {
-    return fetchApi<SecurityQuestionsResponse>(`/api/users/security-questions/?email=${encodeURIComponent(email)}`);
-  },
-
-  // Verify security question
-  verifySecurityQuestion: async (data: SecurityQuestionRequest): Promise<{ message: string; email: string }> => {
-    return fetchApi<{ message: string; email: string }>('/api/users/security-questions/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // Request password reset
-  requestPasswordReset: async (data: PasswordResetRequestRequest): Promise<{ message: string; email: string }> => {
-    return fetchApi<{ message: string; email: string }>('/api/users/password/reset/request/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // Confirm password reset
-  confirmPasswordReset: async (data: PasswordResetConfirmRequest): Promise<{ message: string }> => {
-    return fetchApi<{ message: string }>('/api/users/password/reset/confirm/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // Get user profile
-  getProfile: async (): Promise<User> => {
-    return fetchApi<User>('/api/users/profile/');
-  },
-
-  // Update user profile
-  updateProfile: async (data: Partial<User>): Promise<{ message: string; user: User }> => {
-    return fetchApi<{ message: string; user: User }>('/api/users/profile/', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // Refresh token
-  refreshToken: async (refreshToken: string): Promise<{ access: string }> => {
-    return fetchApi<{ access: string }>('/api/users/token/refresh/', {
-      method: 'POST',
-      body: JSON.stringify({ refresh: refreshToken }),
-    });
-  },
+// Method to refresh API client when tokens change
+export const refreshApiClient = () => {
+  // This will cause the next request to re-check the token
+  console.log('API client refreshed - will use new token on next request');
 };
 
-// Helper function for supplier-related API calls
-export const supplierApi = {
-  // Get all suppliers
-  getSuppliers: async () => {
-    return fetchApi('/api/suppliers/suppliers/');
-  },
+// Create auth API object for backward compatibility
+export const authApi = {
+  login: (staffId: string, password: string) => apiClient.login(staffId, password),
+  logout: () => apiClient.logout(),
+  getCurrentUser: () => apiClient.getCurrentUser(),
+  getProfile: () => apiClient.getCurrentUser(), // Alias for backward compatibility
+  refreshToken: () => apiClient.refreshToken(),
+  register: (userData: any) => apiClient.register(userData),
+  verifyOTP: (otpData: { email: string; otp: string; method: 'email' | 'phone' }) => apiClient.verifyOTP(otpData),
+  requestOTP: (otpRequest: { email: string; method: 'email' | 'phone' }) => apiClient.requestOTP(otpRequest),
+};
 
-  // Get material categories
-  getMaterialCategories: async () => {
-    return fetchApi('/api/suppliers/material-categories/');
-  },
-
-  // Get tax regions
-  getTaxRegions: async () => {
-    return fetchApi('/api/suppliers/tax-regions/');
-  },
-
-  // Get currencies
-  getCurrencies: async () => {
-    return fetchApi('/api/suppliers/currencies/');
-  },
-
-  // Calculate tax
-  calculateTax: async (data: { amount: number; tax_region_id: number; include_duties?: boolean }) => {
-    return fetchApi('/api/suppliers/calculate-tax/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  // Create material
-  createMaterial: async (data: any) => {
-    return fetchApi('/api/suppliers/materials/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-}; 
+// Export individual functions for backward compatibility
+export const {
+  getSuppliers,
+  getWarehouses,
+  getMaterials,
+  getOrders,
+  createOrder,
+  updateOrder,
+  getOrder,
+  markOrderDelivered,
+  getWarehouseCapacity,
+  getCapacityAlerts,
+  acknowledgeAlert,
+} = apiClient;
