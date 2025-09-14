@@ -663,11 +663,125 @@ class CalculationService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def calculate_material_environmental_impact(
+        self,
+        materials: List[Dict[str, Any]],
+        order_volume: float
+    ) -> Dict[str, float]:
+        """Calculate environmental impact of materials"""
+        try:
+            total_emissions = 0
+            total_waste = 0
+            
+            for material in materials:
+                # Get material quantities
+                material_volume = order_volume / len(materials)  # Distribute volume equally
+                
+                # Calculate emissions based on material type and processing
+                base_emission_factor = 2.5  # kg CO2e per kg of material (default)
+                if 'organic' in material.get('material_name', '').lower():
+                    base_emission_factor = 1.2
+                elif 'recycled' in material.get('material_name', '').lower():
+                    base_emission_factor = 0.8
+                
+                # Calculate material emissions
+                material_emissions = material_volume * base_emission_factor
+                
+                # Calculate material waste (assuming 5% waste rate)
+                material_waste = material_volume * 0.05
+                
+                total_emissions += material_emissions
+                total_waste += material_waste
+            
+            return {
+                'total_emissions': total_emissions,
+                'total_waste': total_waste,
+                'emissions_per_unit': total_emissions / order_volume if order_volume > 0 else 0,
+                'waste_per_unit': total_waste / order_volume if order_volume > 0 else 0
+            }
+            
+        except Exception as e:
+            # self.logger.error(f"Error calculating material environmental impact: {e}") # This line was commented out in the original file
+            raise CalculationError(f"Material impact calculation failed: {str(e)}")
+    
     async def calculate_transportation_emissions(
         self,
-        data: TransportationInput
-    ) -> TransportationAssessment:
+        data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Calculate transportation emissions and efficiency metrics"""
         try:
-            return await self.transportation_engine.calculate_transportation_emissions(data)
+            # Extract parameters
+            transport_mode = data.get('transport_mode', 'road').lower()
+            distance_km = data.get('distance_km', 0)
+            weight_tons = data.get('weight_tons', 1)
+            volume_m3 = data.get('volume_m3', weight_tons)  # Default: 1 ton per m3
+            
+            # Calculate emissions
+            emissions = self.transportation_engine.calculate_emissions(transport_mode, distance_km, weight_tons)
+            
+            # Calculate costs
+            transport_cost = self.transportation_engine.calculate_transport_cost(transport_mode, distance_km, weight_tons)
+            
+            # Calculate efficiency metrics
+            efficiency_score = self.transportation_engine.calculate_efficiency_score(
+                transport_mode, distance_km, weight_tons, emissions, transport_cost
+            )
+            
+            # Generate recommendations
+            recommendations = self.transportation_engine.generate_transport_recommendations(
+                transport_mode, distance_km, emissions, transport_cost
+            )
+            
+            return {
+                'transport_mode': transport_mode,
+                'distance_km': distance_km,
+                'weight_tons': weight_tons,
+                'emissions_kg_co2e': emissions,
+                'transport_cost': transport_cost,
+                'cost_per_km': transport_cost / distance_km if distance_km > 0 else 0,
+                'emissions_per_km': emissions / distance_km if distance_km > 0 else 0,
+                'efficiency_score': efficiency_score,
+                'recommendations': recommendations
+            }
+            
         except Exception as e:
-            raise CalculationError(f"Error calculating transportation emissions: {str(e)}") 
+            # self.logger.error(f"Error calculating transportation emissions: {e}") # This line was commented out in the original file
+            raise CalculationError(f"Transportation calculation failed: {str(e)}")
+            
+    def _calculate_material_emission_factor(
+        self,
+        material_type: str,
+        processing_method: str = 'standard'
+    ) -> float:
+        """Calculate emission factor for different material types"""
+        
+        # Base emission factors (kg CO2e per kg)
+        base_factors = {
+            'organic': 1.2,
+            'recycled': 0.8,
+            'plastic': 3.5,
+            'metal': 4.0,
+            'paper': 1.5,
+            'glass': 2.0,
+            'standard': 2.5
+        }
+        
+        # Processing method multipliers
+        process_multipliers = {
+            'standard': 1.0,
+            'minimal': 0.8,
+            'intensive': 1.3,
+            'recycled': 0.7
+        }
+        
+        # Get base factor
+        base_factor = 2.5  # Default
+        for material_category, factor in base_factors.items():
+            if material_category in material_type.lower():
+                base_factor = factor
+                break
+        
+        # Apply processing multiplier
+        multiplier = process_multipliers.get(processing_method, 1.0)
+        
+        return base_factor * multiplier 

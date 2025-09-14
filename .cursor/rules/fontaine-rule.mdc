@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+- Always use pnpm and powershell commands for terminal operations

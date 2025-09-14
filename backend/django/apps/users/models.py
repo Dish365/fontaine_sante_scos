@@ -97,18 +97,34 @@ class User(AbstractUser):
     
     def verify_otp(self, otp, method='email'):
         """Verify OTP for email or phone"""
+        print(f"[OTP_MODEL DEBUG] Verifying OTP: {otp} for method: {method}")
         if method not in ['email', 'phone']:
             raise ValueError("Method must be either 'email' or 'phone'")
             
         # Check if OTP is expired (5 minutes)
-        if not self.last_otp_generation or \
-           timezone.now() - self.last_otp_generation > timedelta(minutes=5):
+        if not self.last_otp_generation:
+            print(f"[OTP_MODEL DEBUG] No OTP generation time found")
+            return False
+            
+        time_diff = timezone.now() - self.last_otp_generation
+        print(f"[OTP_MODEL DEBUG] Time since OTP generation: {time_diff}")
+        
+        if time_diff > timedelta(minutes=5):
+            print(f"[OTP_MODEL DEBUG] OTP expired")
             return False
             
         secret = self.email_otp_secret if method == 'email' else self.phone_otp_secret
+        print(f"[OTP_MODEL DEBUG] Using secret: {secret}")
         totp = pyotp.TOTP(secret, interval=300)
         
-        return totp.verify(otp)
+        # Generate current OTP for comparison
+        current_otp = totp.now()
+        print(f"[OTP_MODEL DEBUG] Current valid OTP: {current_otp}")
+        print(f"[OTP_MODEL DEBUG] Provided OTP: {otp}")
+        
+        result = totp.verify(otp)
+        print(f"[OTP_MODEL DEBUG] Verification result: {result}")
+        return result
     
     def __str__(self):
         return self.email 
